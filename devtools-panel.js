@@ -1420,7 +1420,7 @@
         box-shadow: 0 -18px 50px rgba(10, 20, 40, .24);
         color: #18202f;
         font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-        height: min(90vh, 920px);
+        height: 86vh;
         left: 16px;
         min-height: 520px;
         overflow: hidden;
