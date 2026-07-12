@@ -588,6 +588,7 @@
         event.preventDefault();
         state.selectedId = item.getAttribute("data-request-id");
         state.contextMenu = {
+          type: "request",
           requestId: state.selectedId,
           x: event.clientX,
           y: event.clientY
@@ -635,6 +636,37 @@
         const key = button.getAttribute("data-select-endpoint");
         const group = getMockGroups().find((item) => item.key === key);
         state.selectedMockId = group?.mocks[0]?.id || null;
+        notify();
+      });
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        const key = button.getAttribute("data-select-endpoint");
+        state.contextMenu = {
+          type: "mock-group",
+          groupKey: key,
+          x: event.clientX,
+          y: event.clientY
+        };
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-delete-mock-group]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const groupKey = item.getAttribute("data-delete-mock-group");
+        if (groupKey) {
+          const group = getMockGroups().find((g) => g.key === groupKey);
+          if (group) {
+            state.mocks = state.mocks.filter(
+              (mock) => !(mock.method === group.method && mock.pattern === group.pattern)
+            );
+            const hasSelected = group.mocks.some((m) => m.id === state.selectedMockId);
+            if (hasSelected) {
+              state.selectedMockId = null;
+            }
+            saveMocks();
+          }
+        }
+        state.contextMenu = null;
         notify();
       });
     });
@@ -701,6 +733,12 @@
         saveMocks();
       });
     }
+
+    root.querySelectorAll('input[type="number"]').forEach((input) => {
+      input.addEventListener("wheel", (e) => {
+        e.preventDefault();
+      }, { passive: false });
+    });
   }
 
   function saveMockFromForm(root, id) {
@@ -964,6 +1002,25 @@
   }
 
   function contextMenuTemplate(menu) {
+    if (menu.type === "mock-group") {
+      const group = getMockGroups().find((g) => g.key === menu.groupKey);
+      const top = Math.max(54, Math.min(menu.y, window.innerHeight - 80));
+      const left = Math.max(12, Math.min(menu.x, window.innerWidth - 228));
+      return `
+        <div class="menu-backdrop" data-close-menu></div>
+        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+          <button
+            type="button"
+            data-delete-mock-group="${escapeAttr(menu.groupKey)}"
+            role="menuitem"
+          >
+            <span class="menu-title" style="color: #df2222; font-weight: 800;">Delete mock rule</span>
+            <span class="menu-subtitle">${group ? escapeHtml(`${group.method} ${group.pattern}`) : "Endpoint unavailable"}</span>
+          </button>
+        </div>
+      `;
+    }
+
     const request = state.requests.find((item) => item.id === menu.requestId);
     const disabled = !request || request.status === "pending";
     const pattern = request ? mockPatternFromUrl(request.url) : "";
