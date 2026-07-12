@@ -1,0 +1,34 @@
+{
+  "name": "embedded-mock-tools",
+  "version": "1.0.0",
+  "description": "An embedded network request interception and mock panel prototype with Service Worker support.",
+  "main": "devtools-panel.js",
+  "files": [
+    "devtools-panel.js",
+    "mocktools-sw.js",
+    "index.html",
+    "styles.css",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mock",
+    "interceptor",
+    "service-worker",
+    "embedded",
+    "devtools",
+    "network"
+  ],
+  "author": "Lynan <lynanbreeze@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lynan/mock-tools.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lynan/mock-tools/issues"
+  },
+  "homepage": "https://github.com/lynan/mock-tools#readme"
+}
