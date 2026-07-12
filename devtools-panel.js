@@ -675,6 +675,33 @@
         saveMockFromForm(root, id);
       });
     });
+    root.querySelectorAll("[data-format-field]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const mockId = btn.getAttribute("data-mock-id");
+        const field = btn.getAttribute("data-format-field");
+        const textarea = root.querySelector(`textarea[data-mock-id="${mockId}"][data-mock-field="${field}"]`);
+        if (!textarea) return;
+
+        try {
+          const parsed = JSON.parse(textarea.value);
+          const formatted = JSON.stringify(parsed, null, 2);
+          textarea.value = formatted;
+          
+          const mock = state.mocks.find((m) => m.id === mockId);
+          if (mock) {
+            if (field === "headers") {
+              mock.headers = parsed;
+            } else if (field === "body") {
+              mock.body = formatted;
+            }
+            textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            textarea.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        } catch (error) {
+          window.alert(`Format failed: ${error.message || "invalid JSON"}`);
+        }
+      });
+    });
     root.querySelectorAll("[data-add-config]").forEach((button) => {
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-add-config");
@@ -1173,10 +1200,18 @@
         <label>Delay ms
           <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
         </label>
-        <label>Headers JSON
+        <label>
+          <div class="textarea-header">
+            <span>Headers JSON</span>
+            <button type="button" class="format-btn" data-format-field="headers" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
+          </div>
           <textarea rows="3" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="headers">${escapeHtml(JSON.stringify(mock.headers, null, 2))}</textarea>
         </label>
-        <label>Response body
+        <label>
+          <div class="textarea-header">
+            <span>Response body</span>
+            <button type="button" class="format-btn" data-format-field="body" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
+          </div>
           <textarea rows="6" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="body">${escapeHtml(mock.body)}</textarea>
         </label>
         <div class="mock-actions">
@@ -1212,7 +1247,15 @@
   }
 
   function emptyState(text) {
-    return `<div class="empty">${escapeHtml(text)}</div>`;
+    return `
+      <div class="empty">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+          <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+        </svg>
+        <span>${escapeHtml(text)}</span>
+      </div>
+    `;
   }
 
   function panelCss() {
@@ -1700,17 +1743,27 @@
         justify-content: flex-end;
       }
       .primary {
-        background: #1f6feb;
-        border-color: #1f6feb;
+        background: #1e293b;
+        border-color: #334155;
+        color: #f8fafc;
         min-width: 72px;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .primary:hover {
-        background: #1857bd;
-        border-color: #1857bd;
+        background: #334155;
+        border-color: #475569;
+        color: #fff;
       }
       .primary.saved {
-        background: #18a67d;
-        border-color: #18a67d;
+        background: #0d9488;
+        border-color: #0d9488;
+        color: #fff;
+      }
+      .primary.saved:hover {
+        background: #0f766e;
+        border-color: #0f766e;
       }
       .endpoint-title {
         border: 1px solid #d9e1ee;
@@ -1804,6 +1857,31 @@
         font-variant-numeric: tabular-nums;
         text-align: right;
       }
+      .textarea-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+      }
+      .format-btn {
+        background: transparent;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        color: #475569;
+        cursor: pointer;
+        font-size: 10px;
+        padding: 2px 6px;
+        transition: all 0.2s ease;
+        line-height: 1;
+      }
+      .format-btn:hover {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+        color: #0f172a;
+      }
+      .format-btn:active {
+        background: #e2e8f0;
+      }
       label {
         color: #526070;
         display: grid;
@@ -1875,9 +1953,21 @@
         resize: vertical;
       }
       .danger {
-        background: #fff1f0;
-        border-color: #ffccc7;
-        color: #a8071a;
+        background: #fef2f2;
+        border-color: #fee2e2;
+        color: #ef4444;
+        font-weight: 600;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .danger:hover {
+        background: #ef4444;
+        border-color: #ef4444;
+        color: #ffffff;
+      }
+      .danger:active {
+        background: #dc2626;
+        border-color: #dc2626;
       }
       .menu-backdrop {
         bottom: 0;
@@ -1936,10 +2026,17 @@
         align-items: center;
         color: #778397;
         display: flex;
+        flex-direction: column;
         height: 100%;
         justify-content: center;
         padding: 20px;
         text-align: center;
+        gap: 10px;
+      }
+      .empty-icon {
+        width: 32px;
+        height: 32px;
+        color: #94a3b8;
       }
       @media (max-width: 900px) {
         .devtools { left: 0; right: 0; height: 92vh; }
