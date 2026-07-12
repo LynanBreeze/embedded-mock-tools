@@ -1,5 +1,7 @@
 # Embedded DevTools Mock Panel
 
+![](https://github.com/LynanBreeze/embedded-mock-tools/blob/main/preview.jpg?raw=true)
+
 An embedded network request interception and mock panel prototype, supporting:
 
 - Interception of `fetch` and `XMLHttpRequest`.
