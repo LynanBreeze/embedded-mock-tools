@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Embedded DevTools Mock Panel</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Embedded Network DevTools</p>
+        <h1>Embedded Request Interceptor & Mock Panel</h1>
+        <p class="intro">
+          It intercepts Fetch and XMLHttpRequest in the current page, logs request lists, shows response details, and allows you to edit mock rules in real time.
+        </p>
+        <div class="actions">
+          <button id="fetchUsers" type="button">Fetch /api/users</button>
+          <button id="xhrOrders" type="button">XHR /api/orders</button>
+          <button id="fetchHealth" type="button">Fetch /api/health</button>
+          <button id="clearLog" type="button" class="secondary">Clear Logs</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="panel">
+          <h2>Application Logs</h2>
+          <div id="appLog" class="app-log"></div>
+        </div>
+        <div class="panel">
+          <h2>Usage</h2>
+          
+          <h3 style="font-size: 13px; margin: 12px 0 6px; color: #243047;">Vanilla HTML</h3>
+          <pre><code>&lt;script src="./devtools-panel.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  window.MockTools.init();
+&lt;/script&gt;</code></pre>
+
+          <h3 style="font-size: 13px; margin: 16px 0 6px; color: #243047;">React (Vite / CRA)</h3>
+          <p style="font-size: 11px; color: #526070; margin: 0 0 6px;">Copy files to <code>public/</code>, then load dynamically in <code>src/main.jsx</code>:</p>
+          <pre><code>// src/main.jsx or src/index.js
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+// 1. Declare method to initialize mock tools
+const initMockTools = () => {
+  return new Promise((resolve) => {
+    // Dynamically load in development environment only
+    if (process.env.NODE_ENV === 'development' || import.meta.env.DEV) {
+      const script = document.createElement('script');
+      script.src = '/devtools-panel.js'; // Points to public/devtools-panel.js
+      script.onload = () => {
+        if (window.MockTools) {
+          window.MockTools.init();
+        }
+        resolve();
+      };
+      document.body.appendChild(script);
+    } else {
+      resolve();
+    }
+  });
+};
+
+// 2. Mount React App after mock tools initialized
+initMockTools().then(() => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    &lt;React.StrictMode&gt;
+      &lt;App /&gt;
+    &lt;/React.StrictMode&gt;
+  );
+});</code></pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="./devtools-panel.js"></script>
+    <script>
+      window.MockTools.init({
+        seedMocks: [
+          {
+            enabled: true,
+            method: "GET",
+            pattern: "/api/users",
+            status: 200,
+            delay: 220,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              {
+                users: [
+                  { id: 1, name: "Ada", role: "admin" },
+                  { id: 2, name: "Lin", role: "developer" }
+                ]
+              },
+              null,
+              2
+            )
+          },
+          {
+            enabled: true,
+            method: "POST",
+            pattern: "/api/orders",
+            status: 201,
+            delay: 360,
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ orderId: "MOCK-2026", state: "created" }, null, 2)
+          }
+        ]
+      });
+
+      const appLog = document.querySelector("#appLog");
+      const writeLog = (title, value) => {
+        const item = document.createElement("article");
+        item.className = "log-item";
+        item.innerHTML = `<strong>${title}</strong><pre>${escapeHtml(value)}</pre>`;
+        appLog.prepend(item);
+      };
+
+      const escapeHtml = (value) =>
+        String(value).replace(/[&<>"']/g, (char) => {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char];
+        });
+
+      document.querySelector("#fetchUsers").addEventListener("click", async () => {
+        const response = await fetch("/api/users");
+        writeLog("Fetch /api/users", await response.text());
+      });
+
+      document.querySelector("#xhrOrders").addEventListener("click", () => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/orders");
+        xhr.setRequestHeader("content-type", "application/json");
+        xhr.onload = () => writeLog("XHR /api/orders", xhr.responseText);
+        xhr.send(JSON.stringify({ sku: "panel", quantity: 1 }));
+      });
+
+      document.querySelector("#fetchHealth").addEventListener("click", async () => {
+        try {
+          const response = await fetch("/api/health");
+          writeLog("Fetch /api/health", await response.text());
+        } catch (error) {
+          writeLog("Fetch /api/health", error.message);
+        }
+      });
+
+      document.querySelector("#clearLog").addEventListener("click", () => {
+        appLog.innerHTML = "";
+      });
+    </script>
+  </body>
+</html>
