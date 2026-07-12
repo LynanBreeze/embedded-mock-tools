@@ -502,6 +502,7 @@
         const rect = floatBtn.getBoundingClientRect();
         const btnHeight = rect.height;
         state.floatButtonTucked = true;
+        floatBtn.classList.add("tucked");
 
         const viewWidth = document.documentElement.clientWidth;
         const viewHeight = document.documentElement.clientHeight;
@@ -516,6 +517,7 @@
 
       const untuckButton = () => {
         state.floatButtonTucked = false;
+        floatBtn.classList.remove("tucked");
         const rect = floatBtn.getBoundingClientRect();
         const btnWidth = rect.width || 88;
         const btnHeight = rect.height || 36;
@@ -970,13 +972,17 @@
   function buttonTemplate() {
     const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
     let styleAttr = "";
+    let tuckedClass = "";
     if (state.floatButtonTucked) {
       const viewWidth = document.documentElement.clientWidth;
       const viewHeight = document.documentElement.clientHeight;
       styleAttr = `style="left: ${viewWidth - 12}px; top: ${viewHeight - 80 - 36}px; bottom: auto; right: auto; position: fixed; opacity: 0.62;"`;
+      tuckedClass = " tucked";
     }
+    const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
     return `
-      <button class="float-button" type="button" data-open ${styleAttr} title="Open Network Mock panel">
+      <button class="float-button${tuckedClass}" type="button" data-open ${styleAttr} title="Open Network Mock panel">
+        <span class="indicator-dot ${state.mockEnabled ? "active" : ""}" title="${statusTitle}"></span>
         <span>Net</span>
         <b>${state.requests.length}</b>
         <small>${activeMocks} mock${activeMocks === 1 ? "" : "s"}</small>
@@ -1234,6 +1240,22 @@
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         backdrop-filter: blur(8px);
         white-space: nowrap;
+      }
+      .indicator-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #64748b;
+        transition: background 0.3s ease, box-shadow 0.3s ease;
+        flex-shrink: 0;
+      }
+      .indicator-dot.active {
+        background: #10b981;
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+      }
+      .float-button.tucked {
+        padding-left: 2px !important;
+        padding-right: 0 !important;
       }
       .float-button:hover {
         transform: translateY(-2px);
