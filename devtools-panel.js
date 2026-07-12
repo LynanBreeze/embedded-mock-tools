@@ -24,7 +24,7 @@
     requestSort: "newest",
     requestSearch: "",
     collapsedSections: new Set(["Request headers", "Request body", "Response headers"]),
-    floatButtonPos: { x: null, y: null },
+    floatButtonTucked: false,
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
     subscribers: new Set(),
     originalFetch: null,
@@ -476,76 +476,69 @@
 
   function bindPanelEvents(root) {
     const floatBtn = root.querySelector(".float-button");
-    let clickAllowed = true;
 
     if (floatBtn) {
-      let isDragging = false;
-      let startX = 0;
-      let startY = 0;
-      let initialLeft = 0;
-      let initialTop = 0;
+      let idleTimer = null;
 
-      const onMouseDown = (e) => {
-        if (e.button !== 0) return;
-        startX = e.clientX;
-        startY = e.clientY;
-        
+      const startIdleTimer = () => {
+        stopIdleTimer();
+        idleTimer = setTimeout(() => {
+          tuckButtonIntoEdge();
+        }, 3000);
+      };
+
+      const stopIdleTimer = () => {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+      };
+
+      const tuckButtonIntoEdge = () => {
         const rect = floatBtn.getBoundingClientRect();
-        initialLeft = rect.left;
-        initialTop = rect.top;
-        isDragging = false;
-        clickAllowed = true;
+        const btnHeight = rect.height;
+        state.floatButtonTucked = true;
 
-        document.addEventListener("mousemove", onMouseMove);
-        document.addEventListener("mouseup", onMouseUp);
-        e.preventDefault();
+        const viewWidth = document.documentElement.clientWidth;
+        const viewHeight = document.documentElement.clientHeight;
+
+        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease";
+        floatBtn.style.left = `${viewWidth - 12}px`;
+        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.right = "auto";
+        floatBtn.style.opacity = "0.62";
       };
 
-      const onMouseMove = (e) => {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
+      const untuckButton = () => {
+        state.floatButtonTucked = false;
+        const rect = floatBtn.getBoundingClientRect();
+        const btnWidth = rect.width || 88;
+        const btnHeight = rect.height || 36;
+        const viewWidth = document.documentElement.clientWidth;
+        const viewHeight = document.documentElement.clientHeight;
 
-        if (!isDragging && Math.sqrt(dx * dx + dy * dy) > 5) {
-          isDragging = true;
-          clickAllowed = false;
-        }
-
-        if (isDragging) {
-          const rect = floatBtn.getBoundingClientRect();
-          const btnWidth = rect.width;
-          const btnHeight = rect.height;
-
-          let newLeft = initialLeft + dx;
-          let newTop = initialTop + dy;
-
-          const maxLeft = window.innerWidth - btnWidth;
-          const maxTop = window.innerHeight - btnHeight;
-
-          if (newLeft < 0) newLeft = 0;
-          if (newLeft > maxLeft) newLeft = maxLeft;
-          if (newTop < 0) newTop = 0;
-          if (newTop > maxTop) newTop = maxTop;
-
-          floatBtn.style.left = `${newLeft}px`;
-          floatBtn.style.top = `${newTop}px`;
-          floatBtn.style.bottom = "auto";
-          floatBtn.style.right = "auto";
-
-          state.floatButtonPos.x = newLeft;
-          state.floatButtonPos.y = newTop;
-        }
+        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease";
+        floatBtn.style.left = `${viewWidth - 24 - btnWidth}px`;
+        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.right = "auto";
+        floatBtn.style.opacity = "1";
       };
 
-      const onMouseUp = (e) => {
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-      };
+      floatBtn.addEventListener("mouseenter", () => {
+        stopIdleTimer();
+        untuckButton();
+      });
 
-      floatBtn.addEventListener("mousedown", onMouseDown);
+      floatBtn.addEventListener("mouseleave", () => {
+        startIdleTimer();
+      });
+
+      startIdleTimer();
     }
 
     root.querySelector("[data-open]")?.addEventListener("click", () => {
-      if (!clickAllowed) return;
       state.expanded = true;
       notify();
     });
@@ -959,9 +952,12 @@
 
   function buttonTemplate() {
     const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
-    const styleAttr = state.floatButtonPos.x !== null 
-      ? `style="left: ${Math.min(state.floatButtonPos.x, window.innerWidth - 100)}px; top: ${Math.min(state.floatButtonPos.y, window.innerHeight - 50)}px; bottom: auto; right: auto; position: fixed;"` 
-      : "";
+    let styleAttr = "";
+    if (state.floatButtonTucked) {
+      const viewWidth = document.documentElement.clientWidth;
+      const viewHeight = document.documentElement.clientHeight;
+      styleAttr = `style="left: ${viewWidth - 12}px; top: ${viewHeight - 80 - 36}px; bottom: auto; right: auto; position: fixed; opacity: 0.62;"`;
+    }
     return `
       <button class="float-button" type="button" data-open ${styleAttr} title="Open Network Mock panel">
         <span>Net</span>
@@ -1197,7 +1193,7 @@
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 9999px;
-        bottom: 24px;
+        bottom: 80px;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1);
         color: #fff;
         cursor: pointer;
@@ -1211,6 +1207,7 @@
         z-index: 2147483647;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         backdrop-filter: blur(8px);
+        white-space: nowrap;
       }
       .float-button:hover {
         transform: translateY(-2px);
