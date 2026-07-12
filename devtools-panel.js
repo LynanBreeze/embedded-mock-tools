@@ -25,6 +25,7 @@
     requestSearch: "",
     collapsedSections: new Set(["Request headers", "Request body", "Response headers"]),
     floatButtonTucked: false,
+    requestSearchStatus: "",
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
     subscribers: new Set(),
     originalFetch: null,
@@ -452,19 +453,22 @@
 
     const render = () => {
       const activeElement = shadow.activeElement;
-      const isSearchFocused = activeElement && activeElement.hasAttribute("data-search-input");
-      const selectionStart = isSearchFocused ? activeElement.selectionStart : null;
-      const selectionEnd = isSearchFocused ? activeElement.selectionEnd : null;
+      const focusedSelector = activeElement && (
+        activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
+        activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" : null
+      );
+      const selectionStart = focusedSelector ? activeElement.selectionStart : null;
+      const selectionEnd = focusedSelector ? activeElement.selectionEnd : null;
 
       root.innerHTML = state.expanded ? panelTemplate() : buttonTemplate();
       bindPanelEvents(root);
 
-      if (isSearchFocused) {
-        const newSearchInput = root.querySelector("[data-search-input]");
-        if (newSearchInput) {
-          newSearchInput.focus();
+      if (focusedSelector) {
+        const newFocusedInput = root.querySelector(focusedSelector);
+        if (newFocusedInput) {
+          newFocusedInput.focus();
           if (selectionStart !== null && selectionEnd !== null) {
-            newSearchInput.setSelectionRange(selectionStart, selectionEnd);
+            newFocusedInput.setSelectionRange(selectionStart, selectionEnd);
           }
         }
       }
@@ -697,6 +701,13 @@
         notify();
       });
     }
+    const statusFilter = root.querySelector("[data-status-filter]");
+    if (statusFilter) {
+      statusFilter.addEventListener("input", (event) => {
+        state.requestSearchStatus = event.target.value;
+        notify();
+      });
+    }
     const sortSelect = root.querySelector("[data-sort-select]");
     if (sortSelect) {
       sortSelect.addEventListener("change", (event) => {
@@ -877,6 +888,10 @@
       const q = state.requestSearch.toLowerCase();
       displayRequests = displayRequests.filter((req) => req.url.toLowerCase().includes(q));
     }
+    if (state.requestSearchStatus) {
+      const q = state.requestSearchStatus.toLowerCase();
+      displayRequests = displayRequests.filter((req) => String(req.status).toLowerCase().includes(q));
+    }
     if (state.requestSort === "oldest") {
       displayRequests.reverse();
     }
@@ -908,6 +923,7 @@
           <aside class="request-list">
             <div class="request-filter">
               <input type="text" placeholder="Filter URL..." class="search-input" data-search-input value="${escapeAttr(state.requestSearch)}" />
+              <input type="text" placeholder="Status" class="search-input" data-status-filter value="${escapeAttr(state.requestSearchStatus)}" style="flex: 0 0 54px; width: 54px; text-align: center; padding: 0 4px;" />
               <select class="sort-select" data-sort-select>
                 <option value="newest" ${state.requestSort === "newest" ? "selected" : ""}>Newest</option>
                 <option value="oldest" ${state.requestSort === "oldest" ? "selected" : ""}>Oldest</option>
@@ -967,6 +983,15 @@
     `;
   }
 
+  function statusClass(status) {
+    const s = String(status || "");
+    if (s === "pending") return "status-pending";
+    if (s.startsWith("2") || s.startsWith("3")) return "status-2xx";
+    if (s.startsWith("4")) return "status-4xx";
+    if (s.startsWith("5")) return "status-5xx";
+    return "status-other";
+  }
+
   function requestRow(request) {
     const active = request.id === state.selectedId ? " active" : "";
     const mocked = request.mocked ? " mocked" : "";
@@ -976,7 +1001,7 @@
         <span class="mock-dot" title="${mockLabel}" aria-label="${mockLabel}"></span>
         <span class="method">${escapeHtml(request.method)}</span>
         <span class="url">${escapeHtml(shortUrl(request.url))}</span>
-        <span class="status">${escapeHtml(String(request.status))}</span>
+        <span class="status ${statusClass(request.status)}">${escapeHtml(String(request.status))}</span>
         <span class="duration">${Math.round(request.duration)}ms</span>
       </button>
     `;
@@ -992,7 +1017,7 @@
           <strong>${escapeHtml(`${group.method} ${group.pattern || "(empty pattern)"}`)}</strong>
           <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}</em>
         </span>
-        <span class="rule-status">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
+        <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
       </button>
     `;
   }
@@ -1073,7 +1098,7 @@
         <strong>${escapeHtml(request.url)}</strong>
       </div>
       <div class="meta">
-        <span>Status: ${escapeHtml(String(request.status))}</span>
+        <span>Status: <strong class="${statusClass(request.status)}" style="font-weight: 700;">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
         <span>${request.mocked ? "Mocked" : "Passthrough"}</span>
         <span>${Math.round(request.duration)}ms</span>
@@ -1404,6 +1429,11 @@
         font-size: 11px;
         font-variant-numeric: tabular-nums;
       }
+      .status-2xx { color: #0d7c5b !important; font-weight: 700; }
+      .status-4xx { color: #d97706 !important; font-weight: 700; }
+      .status-5xx { color: #dc2626 !important; font-weight: 700; }
+      .status-pending { color: #8a95a5 !important; }
+      .status-other { color: #5e6a7b !important; }
       .detail {
         background: #f7f9fc;
         border-right: 1px solid #d9e1ee;
