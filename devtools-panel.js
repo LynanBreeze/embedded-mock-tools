@@ -38,9 +38,7 @@
     state.originalFetch = window.fetch ? window.fetch.bind(window) : null;
     state.OriginalXHR = window.XMLHttpRequest;
     state.useServiceWorker = options.useServiceWorker !== false && canUseServiceWorker();
-    state.mocks = ensureEveryEndpointHasActive(
-      enforceSingleActivePerEndpoint(normalizeMocks(options.seedMocks || []))
-    );
+    state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(options.seedMocks || []));
     state.selectedMockId = null;
     installFetchInterceptor();
     installXhrInterceptor();
@@ -53,7 +51,7 @@
   async function hydrateMocks(seedMocks) {
     const persistedMocks = await readPersistedMocks();
     const mocks = persistedMocks.length ? persistedMocks : normalizeMocks(seedMocks);
-    state.mocks = ensureEveryEndpointHasActive(enforceSingleActivePerEndpoint(mocks));
+    state.mocks = enforceSingleActivePerEndpoint(mocks);
     state.selectedMockId = null;
     state.persistenceReady = true;
     if (state.mocks.length) persistMocks(state.mocks);
@@ -455,7 +453,8 @@
       const activeElement = shadow.activeElement;
       const focusedSelector = activeElement && (
         activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
-        activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" : null
+        activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" :
+        (activeElement.hasAttribute("data-group-field") && activeElement.getAttribute("data-group-field") === "pattern") ? '[data-group-field="pattern"]' : null
       );
       const selectionStart = focusedSelector ? activeElement.selectionStart : null;
       const selectionEnd = focusedSelector ? activeElement.selectionEnd : null;
@@ -628,7 +627,7 @@
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-delete-mock");
         state.mocks = state.mocks.filter((mock) => mock.id !== id);
-        state.mocks = ensureEveryEndpointHasActive(state.mocks);
+        state.mocks = enforceSingleActivePerEndpoint(state.mocks);
         if (state.selectedMockId === id) state.selectedMockId = null;
         saveMocks();
       });
@@ -710,19 +709,35 @@
           const formatted = JSON.stringify(sorted, null, 2);
           textarea.value = formatted;
           
-          const mock = state.mocks.find((m) => m.id === mockId);
-          if (mock) {
-            if (field === "headers") {
-              mock.headers = sorted;
-            } else if (field === "body") {
-              mock.body = formatted;
+            const mock = state.mocks.find((m) => m.id === mockId);
+            if (mock) {
+              if (field === "headers") {
+                mock.headers = sorted;
+              } else if (field === "body") {
+                mock.body = formatted;
+              }
+              textarea.dispatchEvent(new Event("input", { bubbles: true }));
+              textarea.dispatchEvent(new Event("change", { bubbles: true }));
             }
-            textarea.dispatchEvent(new Event("input", { bubbles: true }));
-            textarea.dispatchEvent(new Event("change", { bubbles: true }));
+
+            btn.innerText = "Formatted!";
+            btn.classList.add("format-success");
+            btn.disabled = true;
+            setTimeout(() => {
+              btn.innerText = "Format";
+              btn.classList.remove("format-success");
+              btn.disabled = false;
+            }, 1500);
+          } catch (error) {
+            btn.innerText = "Error!";
+            btn.classList.add("format-error");
+            btn.disabled = true;
+            setTimeout(() => {
+              btn.innerText = "Format";
+              btn.classList.remove("format-error");
+              btn.disabled = false;
+            }, 1500);
           }
-        } catch (error) {
-          window.alert(`Format failed: ${error.message || "invalid JSON"}`);
-        }
       });
     });
     root.querySelectorAll("[data-add-config]").forEach((button) => {
@@ -790,6 +805,38 @@
       });
     }
 
+    root.querySelectorAll('[data-group-field="method"]').forEach((select) => {
+      select.addEventListener("change", (e) => {
+        const groupKey = select.getAttribute("data-group-key");
+        const newMethod = e.target.value.toUpperCase();
+        const [method, pattern] = groupKey.split("::");
+        state.mocks = state.mocks.map((mock) => {
+          if (mock.method === method && mock.pattern === pattern) {
+            return { ...mock, method: newMethod };
+          }
+          return mock;
+        });
+        saveMocks();
+        notify();
+      });
+    });
+
+    root.querySelectorAll('[data-group-field="pattern"]').forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const groupKey = input.getAttribute("data-group-key");
+        const newPattern = e.target.value;
+        const [method, pattern] = groupKey.split("::");
+        state.mocks = state.mocks.map((mock) => {
+          if (mock.method === method && mock.pattern === pattern) {
+            return { ...mock, pattern: newPattern };
+          }
+          return mock;
+        });
+        saveMocks();
+        notify();
+      });
+    });
+
     root.querySelectorAll('input[type="number"]').forEach((input) => {
       input.addEventListener("wheel", (e) => {
         e.preventDefault();
@@ -805,12 +852,12 @@
     if (!card || !currentMock) return;
     const getField = (field) => card.querySelector(`[data-mock-field="${field}"]`);
     const headers = safeJsonParse(getField("headers")?.value, currentMock.headers);
-    const wantsActive = getField("enabled")?.checked || currentMock.enabled;
+    const wantsActive = getField("enabled") ? getField("enabled").checked : currentMock.enabled;
     const patch = {
       name: getField("name")?.value || "",
       enabled: wantsActive,
-      method: (getField("method")?.value || currentMock.method).toUpperCase(),
-      pattern: getField("pattern")?.value || "",
+      method: getField("method") ? getField("method").value.toUpperCase() : currentMock.method,
+      pattern: getField("pattern") ? getField("pattern").value : currentMock.pattern,
       status: Number(getField("status")?.value || 200),
       delay: Number(getField("delay")?.value || 0),
       headers,
@@ -820,10 +867,7 @@
       if (mock.id !== id) return mock;
       return { ...mock, ...patch };
     });
-    if (wantsActive) {
-      state.mocks = enforceSingleActiveForMock(state.mocks, id);
-    }
-    state.mocks = ensureEveryEndpointHasActive(state.mocks);
+    state.mocks = enforceSingleActiveForMock(state.mocks, id);
     state.selectedMockId = id;
     state.savedMockId = id;
     saveMocks();
@@ -873,9 +917,7 @@
         const parsed = JSON.parse(content);
         const importedMocks = Array.isArray(parsed) ? parsed : parsed.mocks;
         if (!Array.isArray(importedMocks)) throw new Error("Invalid mock backup");
-        state.mocks = ensureEveryEndpointHasActive(
-          enforceSingleActivePerEndpoint(normalizeMocks(importedMocks))
-        );
+        state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(importedMocks));
         state.selectedMockId = null;
         saveMocks();
       } catch (error) {
@@ -1006,7 +1048,12 @@
             </div>
             <div class="mock-layout">
               <div class="mock-list">
-                ${state.mocks.length ? getMockGroups().map(mockListRow).join("") : emptyState("No mock rules")}
+                ${state.mocks.length ? getMockGroups().sort((a, b) => {
+                  const aActive = a.activeMock ? 1 : 0;
+                  const bActive = b.activeMock ? 1 : 0;
+                  if (aActive !== bActive) return bActive - aActive;
+                  return a.key.localeCompare(b.key);
+                }).map(mockListRow).join("") : emptyState("No mock rules")}
               </div>
               <div class="mock-detail">
                 ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
@@ -1172,15 +1219,23 @@
   function endpointDetailTemplate(group) {
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
     return `
-      <div class="endpoint-title">
-        <strong>${escapeHtml(group.method)}</strong>
-        <span>${escapeHtml(group.pattern || "(empty pattern)")}</span>
+      <div class="endpoint-global-settings" style="border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
+        <div style="display: flex; gap: 8px; align-items: flex-start;">
+          <label style="width: 80px; flex-shrink: 0; margin-bottom: 0;">Method
+            <select data-group-field="method" data-group-key="${escapeAttr(group.key)}">
+              ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
+            </select>
+          </label>
+          <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
+            <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" />
+          </label>
+        </div>
       </div>
       <div class="config-tabs">
         ${group.mocks.length > 1 ? group.mocks.map(configTabTemplate).join("") : ""}
         <button class="add-config-tab" type="button" data-add-config="${escapeAttr(selected.id)}">+ Config</button>
       </div>
-      ${selected ? mockTemplate(selected, group) : ""}
+      ${selected ? mockTemplate(selected) : ""}
     `;
   }
 
@@ -1211,12 +1266,7 @@
         <label>Config name
           <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
-        <div class="triple-row">
-          <label>Method
-            <select data-mock-id="${escapeAttr(mock.id)}" data-mock-field="method">
-              ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${mock.method === method ? "selected" : ""}>${method}</option>`).join("")}
-            </select>
-          </label>
+        <div class="pair">
           <label>Status
             <input type="number" min="100" max="599" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" />
           </label>
@@ -1224,9 +1274,6 @@
             <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
           </label>
         </div>
-        <label>URL contains or /regex/
-          <input value="${escapeAttr(mock.pattern)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="pattern" />
-        </label>
         
         <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Headers" style="margin-top: 4px; margin-bottom: 4px;">
           <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
@@ -1924,6 +1971,16 @@
       .format-btn:active {
         background: #e2e8f0;
       }
+      .format-btn.format-success {
+        color: #0d9488;
+        border-color: #0d9488;
+        background: #f0fdf4;
+      }
+      .format-btn.format-error {
+        color: #e11d48;
+        border-color: #e11d48;
+        background: #fff1f2;
+      }
       label {
         color: #526070;
         display: grid;
@@ -2220,9 +2277,6 @@
       group.mocks.push(mock);
       if (mock.enabled && !group.activeMock) group.activeMock = mock;
     });
-    groups.forEach((group) => {
-      if (!group.activeMock) group.activeMock = group.mocks[0] || null;
-    });
     return groups;
   }
 
@@ -2234,34 +2288,35 @@
     const seenActive = new Set();
     return mocks.map((mock) => {
       const key = endpointKey(mock.method, mock.pattern);
-      if (mock.enabled && !seenActive.has(key)) {
-        seenActive.add(key);
-        return mock;
+      if (mock.enabled) {
+        if (!seenActive.has(key)) {
+          seenActive.add(key);
+          return mock;
+        } else {
+          return { ...mock, enabled: false };
+        }
       }
-      if (mock.enabled) return { ...mock, enabled: false };
       return mock;
-    });
-  }
-
-  function ensureEveryEndpointHasActive(mocks) {
-    const activeKeys = new Set(mocks.filter((mock) => mock.enabled).map((mock) => endpointKey(mock.method, mock.pattern)));
-    return mocks.map((mock) => {
-      const key = endpointKey(mock.method, mock.pattern);
-      if (activeKeys.has(key)) return mock;
-      activeKeys.add(key);
-      return { ...mock, enabled: true };
     });
   }
 
   function enforceSingleActiveForMock(mocks, activeMockId) {
     const activeMock = mocks.find((mock) => mock.id === activeMockId);
-    if (!activeMock) return ensureEveryEndpointHasActive(enforceSingleActivePerEndpoint(mocks));
-    const activeKey = endpointKey(activeMock.method, activeMock.pattern);
-    const nextMocks = mocks.map((mock) => {
-      if (endpointKey(mock.method, mock.pattern) !== activeKey) return mock;
-      return { ...mock, enabled: mock.id === activeMockId };
-    });
-    return ensureEveryEndpointHasActive(enforceSingleActivePerEndpoint(nextMocks));
+    if (!activeMock) return enforceSingleActivePerEndpoint(mocks);
+
+    if (activeMock.enabled) {
+      const activeKey = endpointKey(activeMock.method, activeMock.pattern);
+      const nextMocks = mocks.map((mock) => {
+        if (mock.id === activeMockId) return mock;
+        if (endpointKey(mock.method, mock.pattern) === activeKey) {
+          return { ...mock, enabled: false };
+        }
+        return mock;
+      });
+      return enforceSingleActivePerEndpoint(nextMocks);
+    }
+
+    return enforceSingleActivePerEndpoint(mocks);
   }
 
   function escapeHtml(value) {
