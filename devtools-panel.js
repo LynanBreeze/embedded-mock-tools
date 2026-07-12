@@ -23,7 +23,7 @@
     mocks: [],
     requestSort: "newest",
     requestSearch: "",
-    collapsedSections: new Set(["Request headers", "Request body", "Response headers"]),
+    collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers"]),
     floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
@@ -685,7 +685,8 @@
       });
     });
     root.querySelectorAll("[data-format-field]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
         const mockId = btn.getAttribute("data-mock-id");
         const field = btn.getAttribute("data-format-field");
         const textarea = root.querySelector(`textarea[data-mock-id="${mockId}"][data-mock-field="${field}"]`);
@@ -693,13 +694,26 @@
 
         try {
           const parsed = JSON.parse(textarea.value);
-          const formatted = JSON.stringify(parsed, null, 2);
+          
+          const sortObjectKeys = (obj) => {
+            if (obj === null || typeof obj !== "object") return obj;
+            if (Array.isArray(obj)) return obj.map(sortObjectKeys);
+            return Object.keys(obj)
+              .sort()
+              .reduce((acc, key) => {
+                acc[key] = sortObjectKeys(obj[key]);
+                return acc;
+              }, {});
+          };
+
+          const sorted = sortObjectKeys(parsed);
+          const formatted = JSON.stringify(sorted, null, 2);
           textarea.value = formatted;
           
           const mock = state.mocks.find((m) => m.id === mockId);
           if (mock) {
             if (field === "headers") {
-              mock.headers = parsed;
+              mock.headers = sorted;
             } else if (field === "body") {
               mock.body = formatted;
             }
@@ -1184,6 +1198,9 @@
 
   function mockTemplate(mock) {
     const isSaved = state.savedMockId === mock.id;
+    const isHeadersCollapsed = state.collapsedSections.has("Mock Headers");
+    const isBodyCollapsed = state.collapsedSections.has("Mock Body");
+
     return `
       <article class="mock-card" data-mock-card="${escapeAttr(mock.id)}">
         <label class="toggle">
@@ -1194,7 +1211,7 @@
         <label>Config name
           <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
-        <div class="pair">
+        <div class="triple-row">
           <label>Method
             <select data-mock-id="${escapeAttr(mock.id)}" data-mock-field="method">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${mock.method === method ? "selected" : ""}>${method}</option>`).join("")}
@@ -1203,27 +1220,39 @@
           <label>Status
             <input type="number" min="100" max="599" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" />
           </label>
+          <label>Delay ms
+            <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
+          </label>
         </div>
         <label>URL contains or /regex/
           <input value="${escapeAttr(mock.pattern)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="pattern" />
         </label>
-        <label>Delay ms
-          <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
-        </label>
-        <label>
-          <div class="textarea-header">
-            <span>Headers JSON</span>
-            <button type="button" class="format-btn" data-format-field="headers" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
-          </div>
+        
+        <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Headers" style="margin-top: 4px; margin-bottom: 4px;">
+          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span>Headers JSON</span>
+            </div>
+            <button type="button" class="format-btn" data-format-field="headers" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON" style="margin-left: auto;">Format</button>
+          </h3>
           <textarea rows="3" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="headers">${escapeHtml(JSON.stringify(mock.headers, null, 2))}</textarea>
-        </label>
-        <label>
-          <div class="textarea-header">
-            <span>Response body</span>
-            <button type="button" class="format-btn" data-format-field="body" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
-          </div>
+        </div>
+
+        <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Body" style="margin-top: 4px; margin-bottom: 4px;">
+          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span>Response body</span>
+            </div>
+            <button type="button" class="format-btn" data-format-field="body" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON" style="margin-left: auto;">Format</button>
+          </h3>
           <textarea rows="6" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="body">${escapeHtml(mock.body)}</textarea>
-        </label>
+        </div>
         <div class="mock-actions">
           <button type="button" class="primary${isSaved ? " saved" : ""}" data-save-mock="${escapeAttr(mock.id)}">${isSaved ? "Saved" : "Save"}</button>
           <button type="button" class="danger" data-delete-mock="${escapeAttr(mock.id)}">Delete</button>
@@ -1608,6 +1637,9 @@
       .code-section.is-collapsed pre {
         display: none;
       }
+      .code-section.is-collapsed textarea, .code-section.is-collapsed .format-btn {
+        display: none;
+      }
       .code-section.is-collapsed .copy-btn {
         display: none;
       }
@@ -1949,6 +1981,11 @@
         gap: 8px;
         grid-template-columns: 1fr 1fr;
       }
+      .triple-row {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: 1.2fr 1fr 1fr;
+      }
       input, select, textarea {
         background: #fff;
         border: 1px solid #cdd7e6;
@@ -1960,7 +1997,10 @@
       }
       textarea {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.45;
         resize: vertical;
+        tab-size: 2;
       }
       .danger {
         background: #fef2f2;
