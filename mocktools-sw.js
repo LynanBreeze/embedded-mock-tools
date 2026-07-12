@@ -27,6 +27,7 @@ async function mockResponse(mock) {
   const headers = new Headers(mock.headers || {});
   headers.set("x-mocktools-mocked", "1");
   headers.set("x-mocktools-mock-id", mock.id || "");
+  headers.set("Access-Control-Expose-Headers", "x-mocktools-mocked, x-mocktools-mock-id");
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
   return new Response(mock.body || "", {
     status: Number(mock.status || 200),

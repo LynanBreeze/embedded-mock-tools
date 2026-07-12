@@ -595,11 +595,21 @@
         notify();
       });
     });
-    root.querySelector("[data-create-mock-from-request]")?.addEventListener("click", () => {
-      const requestId = root
-        .querySelector("[data-create-mock-from-request]")
-        ?.getAttribute("data-create-mock-from-request");
-      createMockFromRequest(requestId);
+    root.querySelectorAll("[data-create-mock-from-request]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const requestId = item.getAttribute("data-create-mock-from-request");
+        createMockFromRequest(requestId);
+      });
+    });
+    root.querySelectorAll("[data-view-mock]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const mockId = item.getAttribute("data-view-mock");
+        if (mockId) {
+          state.selectedMockId = mockId;
+          state.contextMenu = null;
+          notify();
+        }
+      });
     });
     root.querySelector("[data-close-menu]")?.addEventListener("click", () => {
       state.contextMenu = null;
@@ -958,21 +968,47 @@
     const disabled = !request || request.status === "pending";
     const pattern = request ? mockPatternFromUrl(request.url) : "";
     const existingCount = request ? countMocksForEndpoint(request.method, pattern) : 0;
-    const action = existingCount ? "Add another mock config" : "Add mock from request";
-    const top = Math.max(54, Math.min(menu.y, window.innerHeight - 112));
+    const top = Math.max(54, Math.min(menu.y, window.innerHeight - 150));
     const left = Math.max(12, Math.min(menu.x, window.innerWidth - 228));
-    return `
-      <div class="menu-backdrop" data-close-menu></div>
-      <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+
+    let buttonsHtml = "";
+    if (request && request.mocked) {
+      buttonsHtml = `
+        <button
+          type="button"
+          data-view-mock="${escapeAttr(request.mockId || "")}"
+          role="menuitem"
+        >
+          <span class="menu-title">View mock config</span>
+          <span class="menu-subtitle">Edit the active mock rule</span>
+        </button>
+        <button
+          type="button"
+          data-create-mock-from-request="${escapeAttr(menu.requestId)}"
+          role="menuitem"
+        >
+          <span class="menu-title">Add another mock config</span>
+          <span class="menu-subtitle">${escapeHtml(`${pattern}, ${existingCount} existing`)}</span>
+        </button>
+      `;
+    } else {
+      buttonsHtml = `
         <button
           type="button"
           data-create-mock-from-request="${escapeAttr(menu.requestId)}"
           ${disabled ? "disabled" : ""}
           role="menuitem"
         >
-          <span class="menu-title">${action}</span>
+          <span class="menu-title">Add mock config</span>
           <span class="menu-subtitle">${request ? escapeHtml(`${pattern}${existingCount ? `, ${existingCount} existing` : ""}`) : "Request unavailable"}</span>
         </button>
+      `;
+    }
+
+    return `
+      <div class="menu-backdrop" data-close-menu></div>
+      <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+        ${buttonsHtml}
       </div>
     `;
   }

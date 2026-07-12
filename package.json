@@ -25,10 +25,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lynan/mock-tools.git"
+    "url": "git+https://github.com/lynanBreeze/embedded-mock-tools.git"
   },
   "bugs": {
-    "url": "https://github.com/lynan/mock-tools/issues"
+    "url": "https://github.com/lynanBreeze/embedded-mock-tools/issues"
   },
-  "homepage": "https://github.com/lynan/mock-tools#readme"
+  "homepage": "https://github.com/lynanBreeze/embedded-mock-tools#readme"
 }
