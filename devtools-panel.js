@@ -500,7 +500,16 @@
 
       const tuckButtonIntoEdge = () => {
         const rect = floatBtn.getBoundingClientRect();
-        const btnHeight = rect.height;
+        const btnHeight = rect.height || 42;
+
+        floatBtn.style.transition = "none";
+        floatBtn.style.left = `${rect.left}px`;
+        floatBtn.style.top = `${rect.top}px`;
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.right = "auto";
+
+        floatBtn.offsetHeight;
+
         state.floatButtonTucked = true;
         floatBtn.classList.add("tucked");
 
@@ -1003,7 +1012,8 @@
     if (state.floatButtonTucked) {
       const viewWidth = document.documentElement.clientWidth;
       const viewHeight = document.documentElement.clientHeight;
-      styleAttr = `style="left: ${viewWidth - 12}px; top: ${viewHeight - 80 - 36}px; bottom: auto; right: auto; position: fixed; opacity: 0.62;"`;
+      const btnHeight = 42;
+      styleAttr = `style="left: ${viewWidth - 12}px; top: ${viewHeight - 80 - btnHeight}px; bottom: auto; right: auto; position: fixed; opacity: 0.62;"`;
       tuckedClass = " tucked";
     }
     const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";

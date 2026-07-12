@@ -13,27 +13,53 @@
 
 body {
   margin: 0;
+  background-color:#edf4fa;
+  background-image: url(data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAAgABMDASIAAhEBAxEB/8QAGQAAAwEBAQAAAAAAAAAAAAAAAAgJBwMF/8QAKRAAAQMDAgILAAAAAAAAAAAAAQACAwQFEQZRBwgSExQhIjFCYXGRkv/EABUBAQEAAAAAAAAAAAAAAAAAAAQF/8QAIREAAQMEAQUAAAAAAAAAAAAAAQADBAIFERVSFiExUWH/2gAMAwE5EQA/AKZuMTfWub6mniHieB8lZVduJc9FC6V8ZHRGVgnEnmaudEZKegLmluRnKusW5x84CgSbm1GGainJN4twODPH+kKZs/M5rEzPIrX4zuUKhoa+QUzqOjiU5+qNOT11O9jITgjZL7rTgtW3GeR7YHd52TyzWmjeMFrSvMqtLW+bOYGnPshxrkWOwT5VrEjyVOuXl5rjI49Q7z2QqBHQtvJJ7O36Qn7r4gaEe1//2Q==);
+  background-size: 150vw 150vw;
+  background-position: center;
+  background-repeat: repeat-y;
 }
 
 button {
-  border: 0;
+  border: 1px solid #334155;
   border-radius: 6px;
-  background: #1f6feb;
-  color: #fff;
+  background: #1e293b;
+  color: #f8fafc;
   cursor: pointer;
   font: inherit;
-  font-weight: 650;
-  min-height: 40px;
-  padding: 0 14px;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 0 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 button:hover {
-  background: #1857bd;
+  background: #334155;
+  border-color: #475569;
+  color: #fff;
+}
+
+#fetchTodo {
+  background: #0d9488;
+  border-color: #0d9488;
+}
+
+#fetchTodo:hover {
+  background: #0f766e;
+  border-color: #0f766e;
 }
 
 button.secondary {
-  background: #d9e2f2;
-  color: #243047;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+button.secondary:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 .shell {
@@ -91,6 +117,10 @@ h1 {
   border-radius: 8px;
   min-height: 320px;
   padding: 20px;
+  max-height: 640px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .panel h2 {
@@ -100,18 +130,52 @@ h1 {
 
 pre {
   background: #101827;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #d9e6ff;
   font-size: 13px;
   line-height: 1.55;
   margin: 0;
   overflow: auto;
   padding: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) #101827;
+}
+
+pre::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+pre::-webkit-scrollbar-track {
+  background: #101827;
+  border-radius: 6px;
+}
+
+pre::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+pre::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+pre::-webkit-scrollbar-corner {
+  background: #101827;
 }
 
 .app-log {
   display: grid;
   gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+}
+
+.usage-content {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
 }
 
 .log-item {
@@ -137,4 +201,53 @@ pre {
   .workspace {
     grid-template-columns: 1fr;
   }
+}
+
+.code-wrapper {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Copy button styles */
+.code-wrapper .copy-btn {
+  background: transparent;
+  border: none;
+  color: #8c9ba5;
+  cursor: pointer;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: auto;
+  transition: all 0.2s ease;
+}
+
+.code-wrapper .copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.code-wrapper .copy-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.code-wrapper .copy-btn .icon-check {
+  display: none;
+}
+
+.code-wrapper .copy-btn.copied .icon-copy {
+  display: none;
+}
+
+.code-wrapper .copy-btn.copied .icon-check {
+  display: block;
+  color: #10b981;
 }
