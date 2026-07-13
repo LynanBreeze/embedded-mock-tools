@@ -731,30 +731,6 @@
         if (statusInput) statusInput.value = template.status;
         if (headersTextarea) headersTextarea.value = JSON.stringify(template.headers, null, 2);
         if (bodyTextarea) bodyTextarea.value = template.body;
-
-        card.querySelectorAll("[data-template]").forEach((btn) => {
-          if (btn.getAttribute("data-template") === templateKey) {
-            btn.classList.add("active");
-          } else {
-            btn.classList.remove("active");
-          }
-        });
-      });
-    });
-    root.querySelectorAll('[data-mock-field="status"]').forEach((input) => {
-      input.addEventListener("input", (e) => {
-        const mockId = input.getAttribute("data-mock-id");
-        const card = root.querySelector(`[data-mock-card="${cssEscape(mockId)}"]`);
-        if (!card) return;
-        const currentStatus = Number(e.target.value);
-        card.querySelectorAll("[data-template]").forEach((btn) => {
-          const tVal = Number(btn.getAttribute("data-template"));
-          if (tVal === currentStatus) {
-            btn.classList.add("active");
-          } else {
-            btn.classList.remove("active");
-          }
-        });
       });
     });
     root.querySelectorAll("[data-format-field]").forEach((btn) => {
@@ -1351,9 +1327,9 @@
         <div class="template-selector">
           <span class="template-selector-title">Template Preset</span>
           <div class="template-tabs">
-            <button class="template-tab${mock.status === 200 ? " active" : ""}" type="button" data-template="200" data-mock-id="${escapeAttr(mock.id)}">200 OK</button>
-            <button class="template-tab${mock.status === 404 ? " active" : ""}" type="button" data-template="404" data-mock-id="${escapeAttr(mock.id)}">404 Not Found</button>
-            <button class="template-tab${mock.status === 500 ? " active" : ""}" type="button" data-template="500" data-mock-id="${escapeAttr(mock.id)}">500 Error</button>
+            <button class="template-tab" type="button" data-template="200" data-mock-id="${escapeAttr(mock.id)}">200 OK</button>
+            <button class="template-tab" type="button" data-template="404" data-mock-id="${escapeAttr(mock.id)}">404 Not Found</button>
+            <button class="template-tab" type="button" data-template="500" data-mock-id="${escapeAttr(mock.id)}">500 Error</button>
           </div>
         </div>
         
@@ -2061,12 +2037,7 @@
         border-color: #cbd5e1;
         color: #1e293b;
       }
-      .template-tab.active {
-        background: #eaf2ff;
-        border-color: #a8c8f5;
-        color: #1f6feb;
-        font-weight: 600;
-      }
+
       .textarea-header {
         display: flex;
         justify-content: space-between;
