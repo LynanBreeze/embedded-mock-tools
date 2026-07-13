@@ -626,9 +626,23 @@
     root.querySelectorAll("[data-delete-mock]").forEach((button) => {
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-delete-mock");
+        const targetMock = state.mocks.find((mock) => mock.id === id);
         state.mocks = state.mocks.filter((mock) => mock.id !== id);
         state.mocks = enforceSingleActivePerEndpoint(state.mocks);
-        if (state.selectedMockId === id) state.selectedMockId = null;
+        if (state.selectedMockId === id) {
+          if (targetMock) {
+            const remainingMocksForGroup = state.mocks.filter(
+              (mock) => mock.method === targetMock.method && mock.pattern === targetMock.pattern
+            );
+            if (remainingMocksForGroup.length > 0) {
+              state.selectedMockId = remainingMocksForGroup[0].id;
+            } else {
+              state.selectedMockId = null;
+            }
+          } else {
+            state.selectedMockId = null;
+          }
+        }
         saveMocks();
       });
     });
@@ -681,6 +695,66 @@
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-save-mock");
         saveMockFromForm(root, id);
+      });
+    });
+    const templates = {
+      "200": {
+        status: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: 200, success: true, data: {} }, null, 2)
+      },
+      "404": {
+        status: 404,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: 404, message: "Not Found" }, null, 2)
+      },
+      "500": {
+        status: 500,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: 500, message: "Internal Server Error" }, null, 2)
+      }
+    };
+    root.querySelectorAll("[data-template]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mockId = button.getAttribute("data-mock-id");
+        const templateKey = button.getAttribute("data-template");
+        const template = templates[templateKey];
+        if (!template) return;
+
+        const card = root.querySelector(`[data-mock-card="${cssEscape(mockId)}"]`);
+        if (!card) return;
+
+        const statusInput = card.querySelector('[data-mock-field="status"]');
+        const headersTextarea = card.querySelector('[data-mock-field="headers"]');
+        const bodyTextarea = card.querySelector('[data-mock-field="body"]');
+
+        if (statusInput) statusInput.value = template.status;
+        if (headersTextarea) headersTextarea.value = JSON.stringify(template.headers, null, 2);
+        if (bodyTextarea) bodyTextarea.value = template.body;
+
+        card.querySelectorAll("[data-template]").forEach((btn) => {
+          if (btn.getAttribute("data-template") === templateKey) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+        });
+      });
+    });
+    root.querySelectorAll('[data-mock-field="status"]').forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const mockId = input.getAttribute("data-mock-id");
+        const card = root.querySelector(`[data-mock-card="${cssEscape(mockId)}"]`);
+        if (!card) return;
+        const currentStatus = Number(e.target.value);
+        card.querySelectorAll("[data-template]").forEach((btn) => {
+          const tVal = Number(btn.getAttribute("data-template"));
+          if (tVal === currentStatus) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+        });
       });
     });
     root.querySelectorAll("[data-format-field]").forEach((btn) => {
@@ -1273,6 +1347,14 @@
           <label>Delay ms
             <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
           </label>
+        </div>
+        <div class="template-selector">
+          <span class="template-selector-title">Template Preset</span>
+          <div class="template-tabs">
+            <button class="template-tab${mock.status === 200 ? " active" : ""}" type="button" data-template="200" data-mock-id="${escapeAttr(mock.id)}">200 OK</button>
+            <button class="template-tab${mock.status === 404 ? " active" : ""}" type="button" data-template="404" data-mock-id="${escapeAttr(mock.id)}">404 Not Found</button>
+            <button class="template-tab${mock.status === 500 ? " active" : ""}" type="button" data-template="500" data-mock-id="${escapeAttr(mock.id)}">500 Error</button>
+          </div>
         </div>
         
         <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Headers" style="margin-top: 4px; margin-bottom: 4px;">
@@ -1945,6 +2027,45 @@
         font-size: 10px;
         font-variant-numeric: tabular-nums;
         text-align: right;
+      }
+      .template-selector {
+        margin-top: 10px;
+        margin-bottom: 10px;
+      }
+      .template-selector-title {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 6px;
+      }
+      .template-tabs {
+        display: flex;
+        gap: 6px;
+      }
+      .template-tab {
+        flex: 1;
+        padding: 5px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: #475569;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+        text-align: center;
+        transition: all 0.2s ease;
+      }
+      .template-tab:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #1e293b;
+      }
+      .template-tab.active {
+        background: #eaf2ff;
+        border-color: #a8c8f5;
+        color: #1f6feb;
+        font-weight: 600;
       }
       .textarea-header {
         display: flex;
