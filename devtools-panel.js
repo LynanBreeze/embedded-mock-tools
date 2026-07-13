@@ -911,11 +911,6 @@
       });
     });
 
-    root.querySelectorAll('input[type="number"]').forEach((input) => {
-      input.addEventListener("wheel", (e) => {
-        e.preventDefault();
-      }, { passive: false });
-    });
   }
 
   function saveMockFromForm(root, id) {
@@ -1378,10 +1373,10 @@
         </label>
         <div class="pair">
           <label>Status
-            <input type="number" min="100" max="599" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" />
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" />
           </label>
           <label>Delay ms
-            <input type="number" min="0" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
+            <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
           </label>
         </div>
         <div class="template-selector">
