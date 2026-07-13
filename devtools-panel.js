@@ -1007,14 +1007,20 @@
     const nextIndex = countMocksForEndpoint(source.method, source.pattern) + 1;
     const mock = normalizeMock(
       {
-        ...source,
         id: `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         name: `${source.method} ${source.pattern} #${nextIndex}`,
-        enabled: true
+        enabled: false,
+        method: source.method,
+        pattern: source.pattern,
+        group: source.group,
+        status: 200,
+        delay: 0,
+        headers: { "content-type": "application/json" },
+        body: ""
       },
       state.mocks.length
     );
-    state.mocks = enforceSingleActiveForMock([...state.mocks, mock], mock.id);
+    state.mocks = [...state.mocks, mock];
     state.selectedMockId = mock.id;
     saveMocks();
   }
