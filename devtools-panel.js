@@ -28,6 +28,7 @@
     requestSearchStatus: "",
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
     selectedMockGroupTab: "all",
+    lastGroupKey: null,
     subscribers: new Set(),
     originalFetch: null,
     OriginalXHR: null
@@ -461,8 +462,31 @@
       const selectionStart = focusedSelector && activeElement.selectionStart !== undefined ? activeElement.selectionStart : null;
       const selectionEnd = focusedSelector && activeElement.selectionEnd !== undefined ? activeElement.selectionEnd : null;
 
+      // Save scroll positions
+      const selectedMock = state.mocks.find((mock) => mock.id === state.selectedMockId) || null;
+      const currentGroupKey = selectedMock ? `${selectedMock.method}::${selectedMock.pattern}` : null;
+      const isNewGroup = currentGroupKey !== state.lastGroupKey;
+      state.lastGroupKey = currentGroupKey;
+
+      const scrollPositions = {};
+      root.querySelectorAll(".mock-detail, .request-items, .mock-list").forEach((el) => {
+        if (el.classList.contains("mock-detail")) {
+          scrollPositions[".mock-detail"] = isNewGroup ? 0 : el.scrollTop;
+        } else if (el.classList.contains("request-items")) {
+          scrollPositions[".request-items"] = el.scrollTop;
+        } else if (el.classList.contains("mock-list")) {
+          scrollPositions[".mock-list"] = el.scrollTop;
+        }
+      });
+
       root.innerHTML = state.expanded ? panelTemplate() : buttonTemplate();
       bindPanelEvents(root);
+
+      // Restore scroll positions
+      Object.keys(scrollPositions).forEach((selector) => {
+        const el = root.querySelector(selector);
+        if (el) el.scrollTop = scrollPositions[selector];
+      });
 
       if (focusedSelector) {
         const newFocusedInput = root.querySelector(focusedSelector);
@@ -914,8 +938,6 @@
   }
 
   function saveMockFromForm(root, id) {
-    const detailScroller = root.querySelector(".mock-detail");
-    const previousScrollTop = detailScroller?.scrollTop || 0;
     const card = root.querySelector(`[data-mock-card="${cssEscape(id)}"]`);
     const currentMock = state.mocks.find((mock) => mock.id === id);
     if (!card || !currentMock) return;
@@ -940,18 +962,10 @@
     state.selectedMockId = id;
     state.savedMockId = id;
     saveMocks();
-    requestAnimationFrame(() => {
-      const nextScroller = root.querySelector(".mock-detail");
-      if (nextScroller) nextScroller.scrollTop = previousScrollTop;
-    });
     window.setTimeout(() => {
       if (state.savedMockId !== id) return;
       state.savedMockId = null;
       notify();
-      requestAnimationFrame(() => {
-        const nextScroller = root.querySelector(".mock-detail");
-        if (nextScroller) nextScroller.scrollTop = previousScrollTop;
-      });
     }, 1500);
   }
 
