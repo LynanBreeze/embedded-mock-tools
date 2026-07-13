@@ -1435,8 +1435,48 @@
     `;
   }
 
+  function highlightJson(jsonStr) {
+    if (!jsonStr) return "";
+    let parsed;
+    try {
+      parsed = typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
+    } catch (_e) {
+      return escapeHtml(String(jsonStr));
+    }
+
+    const formatted = JSON.stringify(parsed, null, 2);
+    const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*")(\s*:)?|(-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)\b|\b(true|false|null)\b/g;
+
+    return formatted.replace(regex, (match, stringToken, escapedChar, colonToken, numberToken, keywordToken) => {
+      if (stringToken) {
+        const escapedStr = escapeHtml(stringToken);
+        if (colonToken) {
+          return `<span class="json-key">${escapedStr}</span>${colonToken}`;
+        } else {
+          return `<span class="json-string">${escapedStr}</span>`;
+        }
+      } else if (numberToken) {
+        return `<span class="json-number">${numberToken}</span>`;
+      } else if (keywordToken) {
+        return `<span class="json-${keywordToken}">${keywordToken}</span>`;
+      }
+      return escapeHtml(match);
+    });
+  }
+
   function codeBlock(title, value) {
     const isCollapsed = state.collapsedSections.has(title);
+    let contentHtml = "";
+    try {
+      if (value && typeof value === "string" && (value.trim().startsWith("{") || value.trim().startsWith("["))) {
+        contentHtml = highlightJson(value);
+      } else {
+        contentHtml = escapeHtml(value);
+      }
+    } catch (_e) {
+      contentHtml = escapeHtml(value);
+    }
+
     return `
       <div class="code-section${isCollapsed ? " is-collapsed" : ""}" data-section-title="${escapeAttr(title)}">
         <h3 data-section-toggle>
@@ -1454,7 +1494,7 @@
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </button>
-        <pre>${escapeHtml(value)}</pre>
+        <pre>${contentHtml}</pre>
       </div>
     `;
   }
@@ -1845,6 +1885,24 @@
       }
       pre::-webkit-scrollbar-thumb:hover {
         background: #4b5563;
+      }
+      .json-key {
+        color: #38bdf8;
+        font-weight: 600;
+      }
+      .json-string {
+        color: #34d399;
+      }
+      .json-number {
+        color: #fbbf24;
+      }
+      .json-boolean {
+        color: #c084fc;
+        font-weight: 600;
+      }
+      .json-null {
+        color: #94a3b8;
+        font-style: italic;
       }
       .mock-editor {
         background: #fff;
