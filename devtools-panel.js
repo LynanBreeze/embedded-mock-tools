@@ -27,6 +27,7 @@
     floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
+    selectedMockGroupTab: "all",
     subscribers: new Set(),
     originalFetch: null,
     OriginalXHR: null
@@ -73,7 +74,8 @@
       status: Number(mock.status || 200),
       delay: Number(mock.delay || 0),
       headers: mock.headers || { "content-type": "application/json" },
-      body: typeof mock.body === "string" ? mock.body : JSON.stringify(mock.body || {}, null, 2)
+      body: typeof mock.body === "string" ? mock.body : JSON.stringify(mock.body || {}, null, 2),
+      group: mock.group || ""
     };
   }
 
@@ -454,10 +456,10 @@
       const focusedSelector = activeElement && (
         activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
         activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" :
-        (activeElement.hasAttribute("data-group-field") && activeElement.getAttribute("data-group-field") === "pattern") ? '[data-group-field="pattern"]' : null
+        activeElement.hasAttribute("data-group-field") ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-key="${cssEscape(activeElement.getAttribute("data-group-key"))}"]` : null
       );
-      const selectionStart = focusedSelector ? activeElement.selectionStart : null;
-      const selectionEnd = focusedSelector ? activeElement.selectionEnd : null;
+      const selectionStart = focusedSelector && activeElement.selectionStart !== undefined ? activeElement.selectionStart : null;
+      const selectionEnd = focusedSelector && activeElement.selectionEnd !== undefined ? activeElement.selectionEnd : null;
 
       root.innerHTML = state.expanded ? panelTemplate() : buttonTemplate();
       bindPanelEvents(root);
@@ -832,6 +834,12 @@
         notify();
       });
     }
+    root.querySelectorAll("[data-group-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedMockGroupTab = button.getAttribute("data-group-tab");
+        notify();
+      });
+    });
     root.querySelectorAll("[data-section-toggle]").forEach((toggle) => {
       toggle.addEventListener("click", () => {
         const section = toggle.closest("[data-section-title]");
@@ -879,6 +887,22 @@
         state.mocks = state.mocks.map((mock) => {
           if (mock.method === method && mock.pattern === pattern) {
             return { ...mock, pattern: newPattern };
+          }
+          return mock;
+        });
+        saveMocks();
+        notify();
+      });
+    });
+
+    root.querySelectorAll('[data-group-field="group"]').forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const groupKey = input.getAttribute("data-group-key");
+        const newGroup = e.target.value;
+        const [method, pattern] = groupKey.split("::");
+        state.mocks = state.mocks.map((mock) => {
+          if (mock.method === method && mock.pattern === pattern) {
+            return { ...mock, group: newGroup };
           }
           return mock;
         });
@@ -1040,6 +1064,30 @@
       displayRequests.reverse();
     }
 
+    const allGroups = getMockGroups();
+    const uniqueGroups = Array.from(new Set(allGroups.map((g) => g.group || "Default"))).sort((a, b) => {
+      if (a === "Default") return -1;
+      if (b === "Default") return 1;
+      return a.localeCompare(b);
+    });
+
+    const activeTab = state.selectedMockGroupTab || "all";
+    const filteredGroups = allGroups.filter((g) => {
+      if (activeTab === "all") return true;
+      return (g.group || "Default") === activeTab;
+    });
+
+    const tabsList = ["all", ...uniqueGroups];
+    const groupTabsHtml = `
+      <div class="mock-group-tabs">
+        ${tabsList.map((tab) => {
+          const isActive = activeTab === tab ? " active" : "";
+          const tabLabel = tab === "all" ? "All" : tab;
+          return `<button class="mock-group-tab${isActive}" type="button" data-group-tab="${escapeAttr(tab)}">${escapeHtml(tabLabel)}</button>`;
+        }).join("")}
+      </div>
+    `;
+
     return `
       <section class="devtools">
         <header class="topbar">
@@ -1096,9 +1144,10 @@
                 <button type="button" data-export-mocks title="Export mock backup">Export</button>
               </div>
             </div>
+            ${groupTabsHtml}
             <div class="mock-layout">
               <div class="mock-list">
-                ${state.mocks.length ? getMockGroups().sort((a, b) => {
+                ${filteredGroups.length ? filteredGroups.sort((a, b) => {
                   const aActive = a.activeMock ? 1 : 0;
                   const bActive = b.activeMock ? 1 : 0;
                   if (aActive !== bActive) return bActive - aActive;
@@ -1270,7 +1319,7 @@
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
     return `
       <div class="endpoint-global-settings" style="border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
-        <div style="display: flex; gap: 8px; align-items: flex-start;">
+        <div style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;">
           <label style="width: 80px; flex-shrink: 0; margin-bottom: 0;">Method
             <select data-group-field="method" data-group-key="${escapeAttr(group.key)}">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
@@ -1278,6 +1327,11 @@
           </label>
           <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
             <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" />
+          </label>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: flex-start;">
+          <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
+            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order (leave empty for Default)" data-group-field="group" data-group-key="${escapeAttr(group.key)}" />
           </label>
         </div>
       </div>
@@ -1780,8 +1834,39 @@
       .mock-editor {
         background: #fff;
         display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
         min-height: 0;
+      }
+      .mock-group-tabs {
+        display: flex;
+        gap: 6px;
+        padding: 8px 12px;
+        background: #f8fafc;
+        border-bottom: 1px solid #d9e1ee;
+        overflow-x: auto;
+      }
+      .mock-group-tab {
+        padding: 4px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        color: #475569;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+      }
+      .mock-group-tab:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #1e293b;
+      }
+      .mock-group-tab.active {
+        background: #1e293b;
+        border-color: #1e293b;
+        color: #fff;
+        font-weight: 600;
       }
       .mock-head {
         align-items: center;
@@ -2360,7 +2445,8 @@
           method: mock.method,
           pattern: mock.pattern,
           mocks: [],
-          activeMock: null
+          activeMock: null,
+          group: mock.group || ""
         };
         byKey.set(key, group);
         groups.push(group);
