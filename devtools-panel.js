@@ -40,7 +40,13 @@
     selectedSnapshotRequestIds: new Set(),
     subscribers: new Set(),
     originalFetch: null,
-    OriginalXHR: null
+    OriginalXHR: null,
+    showSettingsModal: false,
+    detailsLayout: window.localStorage.getItem("embedded-devtools-details-layout") || "sidebar",
+    storageUsage: null,
+    editingMockId: null,
+    editingSnapshotId: null,
+    editingSnapshotDraft: null
   };
 
   function init(options = {}) {
@@ -55,8 +61,29 @@
     installXhrInterceptor();
     mountPanel();
     hydrateMocks(options.seedMocks || []);
+    updateStorageEstimate();
     setupServiceWorker();
     return api;
+  }
+
+  async function updateStorageEstimate() {
+    if (navigator.storage && navigator.storage.estimate) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        const usage = estimate.usage || 0;
+        const quota = estimate.quota || 1;
+        state.storageUsage = {
+          usage: (usage / (1024 * 1024)).toFixed(2),
+          quota: (quota / (1024 * 1024)).toFixed(2),
+          remaining: ((quota - usage) / (1024 * 1024)).toFixed(2),
+          percent: ((1 - (usage / quota)) * 100).toFixed(1)
+        };
+      } catch (_e) {
+        state.storageUsage = null;
+      }
+    } else {
+      state.storageUsage = null;
+    }
   }
 
   async function hydrateMocks(seedMocks) {
@@ -75,6 +102,7 @@
     } else {
       state.selectedSnapshotId = state.snapshots[0]?.id || null;
     }
+    startEditingSnapshot(state.selectedSnapshotId);
 
     state.persistenceReady = true;
     if (state.mocks.length) persistMocks(state.mocks);
@@ -954,6 +982,9 @@
         const key = button.getAttribute("data-select-endpoint");
         const group = getMockGroups().find((item) => item.key === key);
         state.selectedMockId = group?.mocks[0]?.id || null;
+        if (state.detailsLayout === "modal") {
+          state.editingMockId = state.selectedMockId;
+        }
         notify();
       });
       button.addEventListener("contextmenu", (event) => {
@@ -1039,7 +1070,7 @@
         if (!textarea) return;
 
         try {
-          const parsed = JSON.parse(textarea.value);
+          const parsed = safeParseLooseJson(textarea.value);
           
           const sortObjectKeys = (obj) => {
             if (obj === null || typeof obj !== "object") return obj;
@@ -1216,6 +1247,10 @@
     root.querySelectorAll("[data-select-snapshot]").forEach((button) => {
       button.addEventListener("click", () => {
         state.selectedSnapshotId = button.getAttribute("data-select-snapshot");
+        startEditingSnapshot(state.selectedSnapshotId);
+        if (state.detailsLayout === "modal") {
+          state.editingSnapshotId = state.selectedSnapshotId;
+        }
         notify();
       });
     });
@@ -1236,10 +1271,8 @@
     });
 
     root.querySelector("[data-rename-snapshot]")?.addEventListener("change", (e) => {
-      const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-      if (snapshot) {
-        snapshot.name = e.target.value;
-        persistSnapshots(state.snapshots);
+      if (state.editingSnapshotDraft) {
+        state.editingSnapshotDraft.name = e.target.value;
         notify();
       }
     });
@@ -1267,6 +1300,7 @@
         syncServiceWorkerSnapshot();
       }
       state.selectedSnapshotId = state.snapshots[0]?.id || null;
+      startEditingSnapshot(state.selectedSnapshotId);
       persistSnapshots(state.snapshots);
       notify();
     });
@@ -1275,14 +1309,8 @@
       el.addEventListener("change", (e) => {
         const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
         const field = el.getAttribute("data-rule-field");
-        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-        if (snapshot && snapshot.rules[ruleIdx]) {
-          let val = e.target.value;
-          snapshot.rules[ruleIdx][field] = val;
-          persistSnapshots(state.snapshots);
-          if (snapshot.id === state.activeSnapshotId) {
-            syncServiceWorkerSnapshot();
-          }
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
+          state.editingSnapshotDraft.rules[ruleIdx][field] = e.target.value;
           notify();
         }
       });
@@ -1291,22 +1319,16 @@
     root.querySelectorAll("[data-delete-snapshot-rule]").forEach((button) => {
       button.addEventListener("click", () => {
         const ruleIdx = parseInt(button.getAttribute("data-delete-snapshot-rule"), 10);
-        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-        if (snapshot && snapshot.rules[ruleIdx]) {
-          snapshot.rules.splice(ruleIdx, 1);
-          persistSnapshots(state.snapshots);
-          if (snapshot.id === state.activeSnapshotId) {
-            syncServiceWorkerSnapshot();
-          }
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
+          state.editingSnapshotDraft.rules.splice(ruleIdx, 1);
           notify();
         }
       });
     });
 
     root.querySelector("[data-add-snapshot-rule]")?.addEventListener("click", () => {
-      const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-      if (snapshot) {
-        snapshot.rules.push({
+      if (state.editingSnapshotDraft) {
+        state.editingSnapshotDraft.rules.push({
           id: `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           method: "GET",
           pattern: "/api/new-pattern",
@@ -1315,10 +1337,6 @@
             { status: 200, delay: 200, headers: { "content-type": "application/json" }, body: "{}" }
           ]
         });
-        persistSnapshots(state.snapshots);
-        if (snapshot.id === state.activeSnapshotId) {
-          syncServiceWorkerSnapshot();
-        }
         notify();
       }
     });
@@ -1329,13 +1347,8 @@
         const parts = val.split("-");
         const ruleIdx = parseInt(parts[0], 10);
         const stepIdx = parseInt(parts[1], 10);
-        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-        if (snapshot && snapshot.rules[ruleIdx] && snapshot.rules[ruleIdx].responses[stepIdx]) {
-          snapshot.rules[ruleIdx].responses.splice(stepIdx, 1);
-          persistSnapshots(state.snapshots);
-          if (snapshot.id === state.activeSnapshotId) {
-            syncServiceWorkerSnapshot();
-          }
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
+          state.editingSnapshotDraft.rules[ruleIdx].responses.splice(stepIdx, 1);
           notify();
         }
       });
@@ -1344,19 +1357,14 @@
     root.querySelectorAll("[data-add-snapshot-step]").forEach((button) => {
       button.addEventListener("click", () => {
         const ruleIdx = parseInt(button.getAttribute("data-add-snapshot-step"), 10);
-        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-        if (snapshot && snapshot.rules[ruleIdx]) {
-          const lastResp = snapshot.rules[ruleIdx].responses[snapshot.rules[ruleIdx].responses.length - 1];
-          snapshot.rules[ruleIdx].responses.push({
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
+          const lastResp = state.editingSnapshotDraft.rules[ruleIdx].responses[state.editingSnapshotDraft.rules[ruleIdx].responses.length - 1];
+          state.editingSnapshotDraft.rules[ruleIdx].responses.push({
             status: lastResp ? lastResp.status : 200,
             delay: lastResp ? lastResp.delay : 0,
             headers: lastResp ? JSON.parse(JSON.stringify(lastResp.headers)) : { "content-type": "application/json" },
             body: lastResp ? lastResp.body : "{}"
           });
-          persistSnapshots(state.snapshots);
-          if (snapshot.id === state.activeSnapshotId) {
-            syncServiceWorkerSnapshot();
-          }
           notify();
         }
       });
@@ -1367,8 +1375,7 @@
         const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
         const stepIdx = parseInt(el.getAttribute("data-step-idx"), 10);
         const field = el.getAttribute("data-snapshot-field");
-        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-        if (snapshot && snapshot.rules[ruleIdx] && snapshot.rules[ruleIdx].responses[stepIdx]) {
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
           let val = e.target.value;
           if (field === "status" || field === "delay") {
             val = Number(val || 0);
@@ -1379,11 +1386,7 @@
               return;
             }
           }
-          snapshot.rules[ruleIdx].responses[stepIdx][field] = val;
-          persistSnapshots(state.snapshots);
-          if (snapshot.id === state.activeSnapshotId) {
-            syncServiceWorkerSnapshot();
-          }
+          state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx][field] = val;
           notify();
         }
       });
@@ -1434,6 +1437,96 @@
         persistSnapshots(state.snapshots);
         notify();
       });
+    });
+
+    root.querySelector("[data-open-settings]")?.addEventListener("click", async () => {
+      await updateStorageEstimate();
+      state.showSettingsModal = true;
+      notify();
+    });
+
+    root.querySelectorAll("[data-close-settings-modal]").forEach((el) => {
+      el.addEventListener("click", () => {
+        state.showSettingsModal = false;
+        notify();
+      });
+    });
+
+    root.querySelectorAll("[data-close-details-modal]").forEach((el) => {
+      el.addEventListener("click", () => {
+        state.selectedMockId = null;
+        state.selectedSnapshotId = null;
+        state.editingMockId = null;
+        state.editingSnapshotId = null;
+        state.editingSnapshotDraft = null;
+        notify();
+      });
+    });
+
+    root.querySelectorAll('input[name="details-layout"]').forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        state.detailsLayout = e.target.value;
+        window.localStorage.setItem("embedded-devtools-details-layout", state.detailsLayout);
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-snapshot-format-field]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const ruleIdx = parseInt(btn.getAttribute("data-rule-idx"), 10);
+        const stepIdx = parseInt(btn.getAttribute("data-step-idx"), 10);
+        const field = btn.getAttribute("data-snapshot-format-field");
+        const textarea = root.querySelector(`textarea[data-snapshot-rule-idx="${ruleIdx}"][data-snapshot-step-idx="${stepIdx}"][data-snapshot-field="${field}"]`);
+        if (!textarea) return;
+
+        try {
+          const parsed = safeParseLooseJson(textarea.value);
+          const formatted = JSON.stringify(parsed, null, 2);
+          textarea.value = formatted;
+          
+          if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
+            state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx][field] = field === "headers" ? parsed : formatted;
+          }
+
+          btn.innerText = "Formatted!";
+          btn.classList.add("format-success");
+          btn.disabled = true;
+          setTimeout(() => {
+            btn.innerText = "Format";
+            btn.classList.remove("format-success");
+            btn.disabled = false;
+          }, 1500);
+        } catch (error) {
+          btn.innerText = "Error!";
+          btn.classList.add("format-error");
+          btn.disabled = true;
+          setTimeout(() => {
+            btn.innerText = "Format";
+            btn.classList.remove("format-error");
+            btn.disabled = false;
+          }, 1500);
+        }
+      });
+    });
+    root.querySelector("[data-save-snapshot-edit]")?.addEventListener("click", () => {
+      if (!state.editingSnapshotDraft) return;
+      const index = state.snapshots.findIndex((s) => s.id === state.editingSnapshotDraft.id);
+      if (index !== -1) {
+        state.snapshots[index] = state.editingSnapshotDraft;
+        persistSnapshots(state.snapshots);
+        if (state.editingSnapshotDraft.id === state.activeSnapshotId) {
+          syncServiceWorkerSnapshot();
+        }
+        window.alert("Snapshot saved successfully!");
+        state.editingSnapshotId = null;
+        notify();
+      }
+    });
+
+    root.querySelector("[data-cancel-snapshot-edit]")?.addEventListener("click", () => {
+      const activeId = state.selectedSnapshotId || state.editingSnapshotId;
+      startEditingSnapshot(activeId);
+      notify();
     });
 
   }
@@ -1613,6 +1706,105 @@
     saveMocks();
   }
 
+  function settingsModalTemplate() {
+    if (!state.showSettingsModal) return "";
+    const spaceText = state.storageUsage 
+      ? `Remaining storage space: ${state.storageUsage.remaining} MB (estimate quota: ${state.storageUsage.quota} MB)`
+      : "Estimate unavailable";
+    
+    return `
+      <div class="modal-overlay" data-close-settings-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+        <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 440px; max-width: 90%; overflow: hidden;">
+          <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
+            <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Settings</h3>
+            <button type="button" class="close-btn" data-close-settings-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+          </div>
+          <div class="modal-body" style="padding: 16px; font-size: 12px; color: #334155;">
+            <div class="settings-group" style="margin-bottom: 16px;">
+              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 8px;">Details Panel Layout</label>
+              <div class="settings-radio-group" style="display: flex; gap: 16px; margin-top: 4px;">
+                <label class="settings-radio-label">
+                  <input type="radio" name="details-layout" value="sidebar" ${state.detailsLayout === "sidebar" ? "checked" : ""} />
+                  <span>Sidebar (Split View)</span>
+                </label>
+                <label class="settings-radio-label">
+                  <input type="radio" name="details-layout" value="modal" ${state.detailsLayout === "modal" ? "checked" : ""} />
+                  <span>Modal Dialog</span>
+                </label>
+              </div>
+            </div>
+            
+            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
+              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">IndexedDB Storage</label>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                ${spaceText}
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+            <button type="button" class="primary-btn" data-close-settings-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Done</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function detailsModalTemplate() {
+    if (state.detailsLayout !== "modal") return "";
+    
+    // For Mock details
+    if (state.activeRightTab === "mocks" && state.editingMockId) {
+      const selectedGroup = state.mocks.find((m) => m.id === state.editingMockId);
+      if (!selectedGroup) return "";
+      const groupKey = `${selectedGroup.method}::${selectedGroup.pattern}`;
+      const group = {
+        key: groupKey,
+        method: selectedGroup.method,
+        pattern: selectedGroup.pattern,
+        mocks: state.mocks.filter((mock) => mock.method === selectedGroup.method && mock.pattern === selectedGroup.pattern)
+      };
+
+      return `
+        <div class="modal-overlay" data-close-details-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 680px; max-width: 90vw; max-height: 85vh; overflow: hidden;">
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
+              <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Edit Mock Rule</h3>
+              <button type="button" class="close-btn" data-close-details-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
+              ${endpointDetailTemplate(group)}
+            </div>
+            <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
+              <button type="button" class="primary-btn" data-close-details-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Close</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // For Snapshot details
+    if (state.activeRightTab === "snapshots" && state.editingSnapshotId) {
+      return `
+        <div class="modal-overlay" data-close-details-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 780px; max-width: 90vw; max-height: 85vh; overflow: hidden;">
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
+              <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Edit Snapshot Rules</h3>
+              <button type="button" class="close-btn" data-close-details-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
+              ${snapshotDetailTemplate()}
+            </div>
+            <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
+              <button type="button" class="primary-btn" data-close-details-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Close</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return "";
+  }
+
   function panelTemplate() {
     const selected = state.requests.find((request) => request.id === state.selectedId);
     const selectedMock =
@@ -1679,6 +1871,12 @@
                 <path d="M11 14.5l0.5 5.5"></path>
               </svg>
             </button>
+            <button type="button" data-open-settings class="icon-btn" title="Open Settings">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
             <button type="button" data-close class="icon-btn close-btn" title="Collapse panel">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>
@@ -1742,7 +1940,7 @@
                   </div>
                 </div>
                 ${groupTabsHtml}
-                <div class="mock-layout">
+                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : ""}">
                   <div class="mock-list">
                     ${filteredGroups.length ? filteredGroups.sort((a, b) => {
                       const aActive = a.activeMock ? 1 : 0;
@@ -1751,9 +1949,11 @@
                       return a.key.localeCompare(b.key);
                     }).map(mockListRow).join("") : emptyState("No mock rules")}
                   </div>
-                  <div class="mock-detail">
-                    ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
-                  </div>
+                  ${state.detailsLayout === "sidebar" ? `
+                    <div class="mock-detail">
+                      ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
+                    </div>
+                  ` : ""}
                 </div>
               </div>
             ` : `
@@ -1772,19 +1972,23 @@
                     <button type="button" data-export-snapshots title="Export snapshot backup" ${state.selectedSnapshotId ? "" : "disabled"}>Export</button>
                   </div>
                 </div>
-                <div class="mock-layout">
+                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : ""}">
                   <div class="mock-list">
                     ${state.snapshots.length ? state.snapshots.map(snapshotListRow).join("") : emptyState("No snapshots")}
                   </div>
-                  <div class="mock-detail">
-                    ${state.selectedSnapshotId ? snapshotDetailTemplate() : emptyState("Select a snapshot")}
-                  </div>
+                  ${state.detailsLayout === "sidebar" ? `
+                    <div class="mock-detail">
+                      ${state.selectedSnapshotId ? snapshotDetailTemplate() : emptyState("Select a snapshot")}
+                    </div>
+                  ` : ""}
                 </div>
               </div>
             `}
           </aside>
         </div>
         ${state.contextMenu ? contextMenuTemplate(state.contextMenu) : ""}
+        ${settingsModalTemplate()}
+        ${detailsModalTemplate()}
       </section>
     `;
   }
@@ -1876,7 +2080,7 @@
   }
 
   function snapshotDetailTemplate() {
-    const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+    const snapshot = state.editingSnapshotDraft;
     if (!snapshot) return emptyState("Select a snapshot");
 
     const isActive = snapshot.id === state.activeSnapshotId;
@@ -1884,6 +2088,11 @@
     const rulesHtml = snapshot.rules.map((rule, ruleIdx) => {
       const stepsHtml = (rule.responses || []).map((resp, stepIdx) => {
         const stepNum = stepIdx + 1;
+        const headerTitle = `expanded-snapshot-headers-${ruleIdx}-${stepIdx}`;
+        const bodyTitle = `collapsed-snapshot-body-${ruleIdx}-${stepIdx}`;
+        const isHeadersCollapsed = !state.collapsedSections.has(headerTitle);
+        const isBodyCollapsed = state.collapsedSections.has(bodyTitle);
+
         return `
           <div class="step-card" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -1898,12 +2107,32 @@
                 <input type="number" value="${resp.delay}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
               </label>
             </div>
-            <label style="display: block; font-size: 10px; margin-bottom: 4px;">Headers (JSON)
-              <textarea data-snapshot-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" rows="1" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}))}</textarea>
-            </label>
-            <label style="display: block; font-size: 10px; margin-bottom: 0;">Body
-              <textarea data-snapshot-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
-            </label>
+            
+            <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="${headerTitle}" style="margin-top: 4px; margin-bottom: 4px;">
+              <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                  <span>Headers (JSON)</span>
+                </div>
+                <button type="button" class="format-btn" data-snapshot-format-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+              </h3>
+              <textarea data-snapshot-field="headers" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
+            </div>
+
+            <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${bodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
+              <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                  <span>Body</span>
+                </div>
+                <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+              </h3>
+              <textarea data-snapshot-field="body" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
+            </div>
           </div>
         `;
       }).join("");
@@ -1911,7 +2140,7 @@
       return `
         <div class="snapshot-rule-card" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
           <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <select data-rule-field="method" data-rule-idx="${ruleIdx}" style="font-size: 11px;">
+            <select data-rule-field="method" data-rule-idx="${ruleIdx}" style="width: 80px; font-weight: 700; font-size: 11px; flex-shrink: 0;">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${rule.method === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
             <input type="text" value="${escapeAttr(rule.pattern)}" data-rule-field="pattern" data-rule-idx="${ruleIdx}" style="flex-grow: 1; font-size: 11px; padding: 2px 6px;" placeholder="URL pattern" />
@@ -1944,6 +2173,15 @@
             </button>
             <button type="button" data-delete-snapshot style="padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #fff; color: #ef4444; border: 1px solid #ef4444;">
               Delete
+            </button>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 8px; border-top: 1px solid #edf2f7; padding-top: 8px;">
+            <button type="button" data-save-snapshot-edit style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #10b981; color: white; border: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              Save Rules
+            </button>
+            <button type="button" data-cancel-snapshot-edit style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #fff; color: #475569; border: 1px solid #cbd5e1;">
+              Reset Draft
             </button>
           </div>
         </div>
@@ -3123,6 +3361,89 @@
       .request-row.selection-active {
         grid-template-columns: 20px 10px 42px minmax(0, 1fr) 42px 46px !important;
       }
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(2px);
+      }
+      .modal-card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        display: flex;
+        flex-direction: column;
+        width: 440px;
+        max-width: 90%;
+        overflow: hidden;
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .modal-header h3 {
+        margin: 0;
+        font-size: 14px;
+        color: #1e293b;
+      }
+      .modal-header .close-btn {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        color: #94a3b8;
+      }
+      .modal-header .close-btn:hover {
+        color: #475569;
+      }
+      .modal-body {
+        padding: 16px;
+        font-size: 12px;
+      }
+      .modal-footer {
+        padding: 8px 16px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .primary-btn {
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .primary-btn:hover {
+        background: #1d4ed8;
+      }
+      .settings-radio-label {
+        display: inline-flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 6px !important;
+        font-size: 12px !important;
+        color: #334155 !important;
+        cursor: pointer;
+      }
+      .settings-radio-label input {
+        width: auto !important;
+        height: auto !important;
+        margin: 0 4px 0 0 !important;
+        cursor: pointer;
+      }
       .icon-btn.active {
         background: #e0f2fe !important;
         color: #0369a1 !important;
@@ -3249,6 +3570,33 @@
       return JSON.parse(value);
     } catch (_error) {
       return fallback;
+    }
+  }
+
+  function safeParseLooseJson(text, fallback = null) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) return fallback || {};
+    try {
+      return JSON.parse(trimmed);
+    } catch (_err) {
+      try {
+        const parsed = new Function(`return (${trimmed});`)();
+        if (parsed && typeof parsed === "object") {
+          return parsed;
+        }
+      } catch (_inner) {
+        throw _inner;
+      }
+    }
+    throw new Error("Invalid JSON");
+  }
+
+  function startEditingSnapshot(id) {
+    const original = state.snapshots.find(s => s.id === id);
+    if (original) {
+      state.editingSnapshotDraft = JSON.parse(JSON.stringify(original));
+    } else {
+      state.editingSnapshotDraft = null;
     }
   }
 
