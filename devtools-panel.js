@@ -44,9 +44,10 @@
     showSettingsModal: false,
     detailsLayout: window.localStorage.getItem("embedded-devtools-details-layout") || "sidebar",
     storageUsage: null,
-    editingMockId: null,
     editingSnapshotId: null,
-    editingSnapshotDraft: null
+    editingSnapshotDraft: null,
+    buttonPosition: null,
+    savedSnapshotId: null
   };
 
   function init(options = {}) {
@@ -57,6 +58,7 @@
     state.useServiceWorker = options.useServiceWorker !== false && canUseServiceWorker();
     state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(options.seedMocks || []));
     state.selectedMockId = null;
+    state.buttonPosition = options.buttonPosition || options.floatButtonPosition || null;
     installFetchInterceptor();
     installXhrInterceptor();
     mountPanel();
@@ -632,6 +634,85 @@
     return url.includes(pattern);
   }
 
+  function isLeftAligned(floatBtn) {
+    const pos = state.buttonPosition;
+    if (typeof pos === "string") {
+      return pos.includes("left");
+    }
+    if (pos && typeof pos === "object") {
+      if (pos.left !== undefined && pos.right === undefined) return true;
+      if (pos.right !== undefined && pos.left === undefined) return false;
+      if (pos.left !== undefined && pos.right !== undefined) {
+        const leftVal = parseFloat(pos.left);
+        const rightVal = parseFloat(pos.right);
+        return leftVal < rightVal;
+      }
+    }
+    if (floatBtn) {
+      const rect = floatBtn.getBoundingClientRect();
+      const viewWidth = document.documentElement.clientWidth;
+      return (rect.left + rect.width / 2) < viewWidth / 2;
+    }
+    return false;
+  }
+
+  function getVerticalPosition(floatBtn) {
+    const pos = state.buttonPosition;
+    let topVal = "auto";
+    let bottomVal = "auto";
+
+    if (pos) {
+      if (typeof pos === "string") {
+        if (pos.startsWith("top")) {
+          topVal = "24px";
+        } else {
+          bottomVal = "150px";
+        }
+      } else if (typeof pos === "object") {
+        if (pos.top !== undefined) topVal = pos.top;
+        if (pos.bottom !== undefined) bottomVal = pos.bottom;
+      }
+    } else {
+      bottomVal = "150px";
+    }
+
+    return { top: topVal, bottom: bottomVal };
+  }
+
+  function applyUntuckedPosition(floatBtn) {
+    const pos = state.buttonPosition;
+    if (!pos) return;
+
+    if (typeof pos === "string") {
+      if (pos === "bottom-left") {
+        floatBtn.style.left = "24px";
+        floatBtn.style.right = "auto";
+        floatBtn.style.bottom = "150px";
+        floatBtn.style.top = "auto";
+      } else if (pos === "bottom-right") {
+        floatBtn.style.left = "auto";
+        floatBtn.style.right = "24px";
+        floatBtn.style.bottom = "150px";
+        floatBtn.style.top = "auto";
+      } else if (pos === "top-left") {
+        floatBtn.style.left = "24px";
+        floatBtn.style.right = "auto";
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.top = "24px";
+      } else if (pos === "top-right") {
+        floatBtn.style.left = "auto";
+        floatBtn.style.right = "24px";
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.top = "24px";
+      }
+    } else if (typeof pos === "object") {
+      floatBtn.style.left = pos.left !== undefined ? pos.left : "auto";
+      floatBtn.style.right = pos.right !== undefined ? pos.right : "auto";
+      floatBtn.style.top = pos.top !== undefined ? pos.top : "auto";
+      floatBtn.style.bottom = pos.bottom !== undefined ? pos.bottom : "auto";
+    }
+  }
+
   function mountPanel() {
     const host = document.createElement("div");
     host.id = "embedded-devtools-host";
@@ -687,23 +768,37 @@
       const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
       if (state.floatButtonTucked) {
         const viewWidth = document.documentElement.clientWidth;
-        const viewHeight = document.documentElement.clientHeight;
-        const btnHeight = 42;
-        floatBtn.style.left = `${viewWidth - 12}px`;
-        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
-        floatBtn.style.bottom = "auto";
-        floatBtn.style.right = "auto";
+        const vPos = getVerticalPosition(floatBtn);
+
+        floatBtn.style.top = vPos.top;
+        floatBtn.style.bottom = vPos.bottom;
+
+        if (isLeftAligned(floatBtn)) {
+          floatBtn.style.left = "-30px";
+          floatBtn.style.right = "auto";
+          floatBtn.classList.add("tucked-left");
+          floatBtn.classList.remove("tucked");
+        } else {
+          floatBtn.style.left = `${viewWidth - 12}px`;
+          floatBtn.style.right = "auto";
+          floatBtn.classList.add("tucked");
+          floatBtn.classList.remove("tucked-left");
+        }
         floatBtn.style.position = "fixed";
         floatBtn.style.opacity = "0.62";
-        floatBtn.classList.add("tucked");
       } else {
-        floatBtn.style.left = "";
-        floatBtn.style.top = "";
-        floatBtn.style.bottom = "";
-        floatBtn.style.right = "";
+        if (state.buttonPosition) {
+          applyUntuckedPosition(floatBtn);
+        } else {
+          floatBtn.style.left = "";
+          floatBtn.style.top = "";
+          floatBtn.style.bottom = "";
+          floatBtn.style.right = "";
+        }
         floatBtn.style.position = "";
         floatBtn.style.opacity = "";
         floatBtn.classList.remove("tucked");
+        floatBtn.classList.remove("tucked-left");
       }
 
       const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
@@ -770,7 +865,6 @@
 
       const tuckButtonIntoEdge = () => {
         const rect = floatBtn.getBoundingClientRect();
-        const btnHeight = rect.height || 42;
 
         floatBtn.style.transition = "none";
         floatBtn.style.left = `${rect.left}px`;
@@ -781,15 +875,23 @@
         floatBtn.offsetHeight;
 
         state.floatButtonTucked = true;
-        floatBtn.classList.add("tucked");
-
+        const vPos = getVerticalPosition(floatBtn);
         const viewWidth = document.documentElement.clientWidth;
-        const viewHeight = document.documentElement.clientHeight;
 
         floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
-        floatBtn.style.left = `${viewWidth - 12}px`;
-        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
-        floatBtn.style.bottom = "auto";
+        
+        floatBtn.style.top = vPos.top;
+        floatBtn.style.bottom = vPos.bottom;
+
+        if (isLeftAligned(floatBtn)) {
+          floatBtn.classList.add("tucked-left");
+          floatBtn.classList.remove("tucked");
+          floatBtn.style.left = "-30px";
+        } else {
+          floatBtn.classList.add("tucked");
+          floatBtn.classList.remove("tucked-left");
+          floatBtn.style.left = `${viewWidth - 12}px`;
+        }
         floatBtn.style.right = "auto";
         floatBtn.style.opacity = "0.62";
       };
@@ -797,16 +899,42 @@
       const untuckButton = () => {
         state.floatButtonTucked = false;
         floatBtn.classList.remove("tucked");
+        floatBtn.classList.remove("tucked-left");
         const rect = floatBtn.getBoundingClientRect();
         const btnWidth = rect.width || 88;
-        const btnHeight = rect.height || 36;
         const viewWidth = document.documentElement.clientWidth;
-        const viewHeight = document.documentElement.clientHeight;
+        const vPos = getVerticalPosition(floatBtn);
 
         floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
-        floatBtn.style.left = `${viewWidth - 24 - btnWidth}px`;
-        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
-        floatBtn.style.bottom = "auto";
+        
+        floatBtn.style.top = vPos.top;
+        floatBtn.style.bottom = vPos.bottom;
+
+        if (isLeftAligned(floatBtn)) {
+          let leftDest = "24px";
+          if (state.buttonPosition) {
+            if (typeof state.buttonPosition === "string") {
+              leftDest = "24px";
+            } else if (typeof state.buttonPosition === "object" && state.buttonPosition.left !== undefined) {
+              leftDest = state.buttonPosition.left;
+            }
+          }
+          floatBtn.style.left = leftDest;
+        } else {
+          let rightDest = "24px";
+          if (state.buttonPosition) {
+            if (typeof state.buttonPosition === "string") {
+              rightDest = "24px";
+            } else if (typeof state.buttonPosition === "object" && state.buttonPosition.right !== undefined) {
+              rightDest = state.buttonPosition.right;
+            }
+          }
+          let rightPx = 24;
+          if (typeof rightDest === "string" && rightDest.endsWith("px")) {
+            rightPx = parseFloat(rightDest);
+          }
+          floatBtn.style.left = `${viewWidth - rightPx - btnWidth}px`;
+        }
         floatBtn.style.right = "auto";
         floatBtn.style.opacity = "1";
       };
@@ -1571,9 +1699,16 @@
         if (state.editingSnapshotDraft.id === state.activeSnapshotId) {
           syncServiceWorkerSnapshot();
         }
-        window.alert("Snapshot saved successfully!");
-        state.editingSnapshotId = null;
+        
+        const id = state.editingSnapshotDraft.id;
+        state.savedSnapshotId = id;
         notify();
+
+        setTimeout(() => {
+          if (state.savedSnapshotId !== id) return;
+          state.savedSnapshotId = null;
+          notify();
+        }, 1500);
       }
     });
 
@@ -2116,6 +2251,7 @@
     if (!snapshot) return emptyState("Select a snapshot");
 
     const isActive = snapshot.id === state.activeSnapshotId;
+    const isSaved = snapshot.id === state.savedSnapshotId;
 
     const rulesHtml = snapshot.rules.map((rule, ruleIdx) => {
       const stepsHtml = (rule.responses || []).map((resp, stepIdx) => {
@@ -2133,10 +2269,10 @@
             </div>
             <div style="display: flex; gap: 6px; margin-bottom: 6px;">
               <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Status
-                <input type="number" value="${resp.status}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
               </label>
               <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Delay (ms)
-                <input type="number" value="${resp.delay}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
               </label>
             </div>
             
@@ -2196,23 +2332,36 @@
     return `
       <div style="padding: 12px;">
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
-          <label style="font-size: 11px; font-weight: 700; margin-bottom: 0;">Snapshot Name
-            <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 13px; padding: 4px 8px; margin-top: 4px;" />
-          </label>
-          <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <button type="button" data-toggle-active-snapshot class="${isActive ? "danger" : "primary"}" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
-              ${isActive ? "Deactivate Snapshot" : "Activate Snapshot"}
-            </button>
-            <button type="button" data-delete-snapshot class="danger" style="font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
-              Delete
-            </button>
+          <div style="display: flex; align-items: flex-end; gap: 12px; width: 100%;">
+            <label style="font-size: 11px; font-weight: 700; flex-grow: 1; display: flex; flex-direction: column; gap: 4px; margin-bottom: 0;">
+              Snapshot Name
+              <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 13px; padding: 4px 8px; height: 30px; box-sizing: border-box;" />
+            </label>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+              <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Active</span>
+              <label class="toggle" style="display: inline-flex; height: 30px; align-items: center;" title="Activate/Deactivate Snapshot">
+                <input type="checkbox" data-toggle-active-snapshot ${isActive ? "checked" : ""} />
+                <span class="switch" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
+              <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Delete</span>
+              <button type="button" data-delete-snapshot class="danger" style="font-size: 11px; height: 30px; width: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;" title="Delete Snapshot">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
+            </div>
           </div>
           <div style="display: flex; gap: 8px; margin-top: 8px; border-top: 1px solid #edf2f7; padding-top: 8px;">
-            <button type="button" data-save-snapshot-edit class="primary" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-              <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-              Save Rules
+            <button type="button" data-save-snapshot-edit class="${isSaved ? "primary saved" : "primary"}" style="flex: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+              ${isSaved ? `
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Saved
+              ` : `
+                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                Save Rules
+              `}
             </button>
-            <button type="button" data-cancel-snapshot-edit class="mini-btn" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
+            <button type="button" data-cancel-snapshot-edit class="mini-btn" style="flex: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
               Reset Draft
             </button>
           </div>
@@ -2505,7 +2654,7 @@
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 9999px;
-        bottom: 80px;
+        bottom: 150px;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1);
         color: #fff;
         cursor: pointer;
@@ -2542,8 +2691,19 @@
         box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
       }
       .float-button.tucked {
+        width: 42px !important;
+        min-width: 42px !important;
+        overflow: hidden !important;
         padding-left: 2px !important;
         padding-right: 0 !important;
+      }
+      .float-button.tucked-left {
+        width: 42px !important;
+        min-width: 42px !important;
+        overflow: hidden !important;
+        flex-direction: row-reverse;
+        padding-right: 2px !important;
+        padding-left: 0 !important;
       }
       .float-button:hover {
         transform: translateY(-2px);
