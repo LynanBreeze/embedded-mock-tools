@@ -953,6 +953,8 @@
         if (state.activeSnapshotId) {
           state.activeRightTab = "snapshots";
           state.selectedSnapshotId = state.activeSnapshotId;
+        } else {
+          state.activeRightTab = "mocks";
         }
         notify();
       };
@@ -1123,6 +1125,39 @@
           state.selectedMockId = mockId;
           state.contextMenu = null;
           notify();
+        }
+      });
+    });
+    root.querySelectorAll("[data-navigate-to-source]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const sourceId = item.getAttribute("data-navigate-to-source");
+        const sourceType = item.getAttribute("data-source-type");
+        if (!sourceId) return;
+        if (sourceType === "snapshot") {
+          // Navigate to the snapshot that contains this rule
+          const snapshot = state.snapshots.find((s) =>
+            s.rules && s.rules.some((r) => r.id === sourceId)
+          );
+          if (snapshot) {
+            state.activeRightTab = "snapshots";
+            state.selectedSnapshotId = snapshot.id;
+            startEditingSnapshot(snapshot.id);
+            if (state.detailsLayout === "modal") {
+              state.editingSnapshotId = snapshot.id;
+            }
+            notify();
+          }
+        } else {
+          // Navigate to the mock rule
+          const mock = state.mocks.find((m) => m.id === sourceId);
+          if (mock) {
+            state.activeRightTab = "mocks";
+            state.selectedMockId = sourceId;
+            if (state.detailsLayout === "modal") {
+              state.editingMockId = sourceId;
+            }
+            notify();
+          }
         }
       });
     });
@@ -2526,7 +2561,10 @@
       <div class="meta">
         <span>Status: <strong class="${statusClass(request.status)}" style="font-weight: 700;">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
-        <span>${request.snapshotted ? "Snapshotted" : request.mocked ? "Mocked" : "Passthrough"}</span>
+        ${(request.mocked || request.snapshotted) && request.mockId
+          ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(request.mockId)}" data-source-type="${request.snapshotted ? "snapshot" : "mock"}" title="View ${request.snapshotted ? "snapshot config" : "mock rule"}">${request.snapshotted ? "Snapshotted" : "Mocked"} ↗</button>`
+          : `<span>${request.snapshotted ? "Snapshotted" : request.mocked ? "Mocked" : "Passthrough"}</span>`
+        }
         <span>${Math.round(request.duration)}ms</span>
       </div>
       ${request.error ? `<p class="error">${escapeHtml(request.error)}</p>` : ""}
@@ -3039,6 +3077,23 @@
         color: #526070;
         font-size: 12px;
         padding: 5px 8px;
+      }
+      .meta .source-link {
+        background: #ecfdf5;
+        border: 1px solid #6ee7b7;
+        border-radius: 5px;
+        color: #047857;
+        font-size: 12px;
+        padding: 5px 8px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.15s ease;
+        font-family: inherit;
+      }
+      .meta .source-link:hover {
+        background: #d1fae5;
+        border-color: #34d399;
+        color: #065f46;
       }
       .error { color: #b42318; font-weight: 700; }
       .code-section { position: relative; margin-bottom: 14px; }
