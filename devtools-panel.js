@@ -1243,6 +1243,42 @@
         if (bodyTextarea) bodyTextarea.value = template.body;
       });
     });
+    root.querySelectorAll("[data-fill-mock-status]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mockId = button.getAttribute("data-mock-id");
+        const val = button.getAttribute("data-fill-mock-status");
+        const card = root.querySelector(`[data-mock-card="${cssEscape(mockId)}"]`);
+        if (card) {
+          const statusInput = card.querySelector('[data-mock-field="status"]');
+          if (statusInput) {
+            statusInput.value = val;
+            statusInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+        const mock = state.mocks.find((m) => m.id === mockId);
+        if (mock) {
+          mock.status = Number(val);
+        }
+      });
+    });
+    root.querySelectorAll("[data-fill-mock-delay]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mockId = button.getAttribute("data-mock-id");
+        const val = button.getAttribute("data-fill-mock-delay");
+        const card = root.querySelector(`[data-mock-card="${cssEscape(mockId)}"]`);
+        if (card) {
+          const delayInput = card.querySelector('[data-mock-field="delay"]');
+          if (delayInput) {
+            delayInput.value = val;
+            delayInput.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+        const mock = state.mocks.find((m) => m.id === mockId);
+        if (mock) {
+          mock.delay = Number(val);
+        }
+      });
+    });
     root.querySelectorAll("[data-format-field]").forEach((btn) => {
       btn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1569,6 +1605,28 @@
             }
           }
           state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx][field] = val;
+          notify();
+        }
+      });
+    });
+    root.querySelectorAll("[data-fill-snapshot-status]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-rule-idx"), 10);
+        const stepIdx = parseInt(button.getAttribute("data-step-idx"), 10);
+        const val = parseInt(button.getAttribute("data-fill-snapshot-status"), 10);
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
+          state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx].status = val;
+          notify();
+        }
+      });
+    });
+    root.querySelectorAll("[data-fill-snapshot-delay]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-rule-idx"), 10);
+        const stepIdx = parseInt(button.getAttribute("data-step-idx"), 10);
+        const val = parseInt(button.getAttribute("data-fill-snapshot-delay"), 10);
+        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
+          state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx].delay = val;
           notify();
         }
       });
@@ -1931,7 +1989,7 @@
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
-            <button type="button" class="primary-btn" data-close-settings-modal>Done</button>
+            <button type="button" class="secondary-btn" data-close-settings-modal>Done</button>
           </div>
         </div>
       </div>
@@ -1964,7 +2022,7 @@
               ${endpointDetailTemplate(group)}
             </div>
             <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="primary-btn" data-close-details-modal>Close</button>
+              <button type="button" class="secondary-btn" data-close-details-modal>Close</button>
             </div>
           </div>
         </div>
@@ -1984,7 +2042,7 @@
               ${snapshotDetailTemplate()}
             </div>
             <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="primary-btn" data-close-details-modal>Close</button>
+              <button type="button" class="secondary-btn" data-close-details-modal>Close</button>
             </div>
           </div>
         </div>
@@ -2075,15 +2133,15 @@
         <div class="grid">
           <aside class="request-list">
             ${state.snapshotSelectionMode ? `
-              <div class="request-filter selection-toolbar" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; background: #e0f2fe; border-bottom: 1px solid #bae6fd;">
+              <div class="request-filter selection-toolbar" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom: 1px solid #bae6fd; height: 43px; box-sizing: border-box;">
                 <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotRequestIds.size}</span>
                 <div style="display: flex; gap: 4px;">
-                  <button type="button" class="mini-btn" data-snapshot-select-all style="padding: 2px 6px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a;">All</button>
-                  <button type="button" class="mini-btn" data-snapshot-deselect-all style="padding: 2px 6px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569;">None</button>
+                  <button type="button" class="mini-btn" data-snapshot-select-all style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">All</button>
+                  <button type="button" class="mini-btn" data-snapshot-deselect-all style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">None</button>
                 </div>
                 <div style="display: flex; gap: 6px; margin-left: auto;">
-                  <button type="button" data-save-snapshot-confirm style="background: #10b981; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Save</button>
-                  <button type="button" data-save-snapshot-cancel style="background: #cbd5e1; color: #334155; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Cancel</button>
+                  <button type="button" data-save-snapshot-confirm style="background: #10b981; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Save</button>
+                  <button type="button" data-save-snapshot-cancel style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
                 </div>
               </div>
             ` : `
@@ -2268,12 +2326,28 @@
               <button type="button" class="danger-text-btn" data-delete-snapshot-step="${ruleIdx}-${stepIdx}">Delete Step</button>
             </div>
             <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-              <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Status
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
-              </label>
-              <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Delay (ms)
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
-              </label>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 10px; color: #475569; font-weight: 600;">Status</span>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+                  <div style="display: flex; gap: 2px; flex-shrink: 0;">
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="200" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">200</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="404" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">404</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="500" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">500</button>
+                  </div>
+                </div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 10px; color: #475569; font-weight: 600;">Delay (ms)</span>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+                  <div style="display: flex; gap: 2px; flex-shrink: 0;">
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="0" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">0</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="500" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">500</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="1000" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">1000</button>
+                  </div>
+                </div>
+              </div>
             </div>
             
             <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="${headerTitle}" style="margin-top: 4px; margin-bottom: 4px;">
@@ -2519,12 +2593,28 @@
           <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
         <div class="pair">
-          <label>Status
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" />
-          </label>
-          <label>Delay ms
-            <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" />
-          </label>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: #526070;">Status</span>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+              <div style="display: flex; gap: 2px; flex-shrink: 0;">
+                <button type="button" class="quick-fill-btn" data-fill-mock-status="200" data-mock-id="${escapeAttr(mock.id)}">200</button>
+                <button type="button" class="quick-fill-btn" data-fill-mock-status="404" data-mock-id="${escapeAttr(mock.id)}">404</button>
+                <button type="button" class="quick-fill-btn" data-fill-mock-status="500" data-mock-id="${escapeAttr(mock.id)}">500</button>
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 12px; color: #526070;">Delay ms</span>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+              <div style="display: flex; gap: 2px; flex-shrink: 0;">
+                <button type="button" class="quick-fill-btn" data-fill-mock-delay="0" data-mock-id="${escapeAttr(mock.id)}">0</button>
+                <button type="button" class="quick-fill-btn" data-fill-mock-delay="500" data-mock-id="${escapeAttr(mock.id)}">500</button>
+                <button type="button" class="quick-fill-btn" data-fill-mock-delay="1000" data-mock-id="${escapeAttr(mock.id)}">1000</button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="template-selector">
           <span class="template-selector-title">Template Preset</span>
@@ -3367,6 +3457,31 @@
         border-color: #cbd5e1;
         color: #1e293b;
       }
+      .quick-fill-btn {
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        color: #475569;
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0 6px;
+        height: 30px;
+        min-height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        box-shadow: none;
+      }
+      .quick-fill-btn:hover {
+        background: #e2e8f0;
+        border-color: #94a3b8;
+        color: #0f172a;
+      }
+      .quick-fill-btn:active {
+        background: #cbd5e1;
+      }
 
       .textarea-header {
         display: flex;
@@ -3641,6 +3756,23 @@
         background: #334155;
         border-color: #475569;
         color: #fff;
+      }
+      .secondary-btn {
+        background: #fff;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .secondary-btn:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #1e293b;
       }
       .dashed-btn {
         width: 100%;
