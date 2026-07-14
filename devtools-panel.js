@@ -6,6 +6,8 @@
   const DB_VERSION = 1;
   const STORE_NAME = "settings";
   const MOCKS_RECORD_KEY = "mocks";
+  const SNAPSHOTS_RECORD_KEY = "snapshots";
+  const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
   const MAX_REQUESTS = 200;
   const state = {
     installed: false,
@@ -29,6 +31,13 @@
     mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
     selectedMockGroupTab: "all",
     lastGroupKey: null,
+    activeRightTab: "mocks",
+    snapshots: [],
+    activeSnapshotId: null,
+    selectedSnapshotId: null,
+    playbackIndices: {},
+    snapshotSelectionMode: false,
+    selectedSnapshotRequestIds: new Set(),
     subscribers: new Set(),
     originalFetch: null,
     OriginalXHR: null
@@ -55,9 +64,22 @@
     const mocks = persistedMocks.length ? persistedMocks : normalizeMocks(seedMocks);
     state.mocks = enforceSingleActivePerEndpoint(mocks);
     state.selectedMockId = null;
+
+    const persistedSnapshots = await readPersistedSnapshots();
+    state.snapshots = persistedSnapshots || [];
+    state.activeSnapshotId = await readActiveSnapshotId();
+    
+    if (state.activeSnapshotId) {
+      state.activeRightTab = "snapshots";
+      state.selectedSnapshotId = state.activeSnapshotId;
+    } else {
+      state.selectedSnapshotId = state.snapshots[0]?.id || null;
+    }
+
     state.persistenceReady = true;
     if (state.mocks.length) persistMocks(state.mocks);
     syncServiceWorkerMocks();
+    syncServiceWorkerSnapshot();
     notify();
   }
 
@@ -129,6 +151,20 @@
     });
   }
 
+  function syncServiceWorkerSnapshot() {
+    if (!state.useServiceWorker) return;
+    const worker =
+      navigator.serviceWorker.controller ||
+      state.serviceWorkerRegistration?.active ||
+      state.serviceWorkerRegistration?.waiting ||
+      state.serviceWorkerRegistration?.installing;
+    const activeSnap = state.snapshots.find(s => s.id === state.activeSnapshotId);
+    worker?.postMessage({
+      type: "MOCKTOOLS_UPDATE_SNAPSHOT",
+      activeSnapshotRules: activeSnap ? activeSnap.rules : null
+    });
+  }
+
   async function readPersistedMocks() {
     try {
       const record = await readFromIndexedDb(MOCKS_RECORD_KEY);
@@ -158,6 +194,61 @@
       } catch (_fallbackError) {
         // If both persistent stores fail, keep the in-memory state alive for this session.
       }
+    }
+  }
+
+  async function readPersistedSnapshots() {
+    try {
+      const record = await readFromIndexedDb(SNAPSHOTS_RECORD_KEY);
+      if (Array.isArray(record?.value)) return record.value;
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+    }
+    try {
+      const saved = safeJsonParse(localStorage.getItem("embedded-devtools-snapshots"), null);
+      return Array.isArray(saved) ? saved : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  async function persistSnapshots(snapshots) {
+    try {
+      await writeToIndexedDb(SNAPSHOTS_RECORD_KEY, snapshots);
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+      try {
+        localStorage.setItem("embedded-devtools-snapshots", JSON.stringify(snapshots));
+      } catch (_fallbackError) {}
+    }
+  }
+
+  async function readActiveSnapshotId() {
+    try {
+      const record = await readFromIndexedDb(ACTIVE_SNAPSHOT_ID_KEY);
+      return record ? record.value : null;
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+    }
+    try {
+      return localStorage.getItem("embedded-devtools-active-snapshot-id") || null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function persistActiveSnapshotId(id) {
+    try {
+      await writeToIndexedDb(ACTIVE_SNAPSHOT_ID_KEY, id);
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+      try {
+        if (id) {
+          localStorage.setItem("embedded-devtools-active-snapshot-id", id);
+        } else {
+          localStorage.removeItem("embedded-devtools-active-snapshot-id");
+        }
+      } catch (_fallbackError) {}
     }
   }
 
@@ -225,9 +316,28 @@
     window.fetch = async function interceptedFetch(input, initOptions = {}) {
       const startedAt = performance.now();
       const request = createFetchRecord(input, initOptions);
-      const mock = findMock(request.method, request.url);
+      const snapshotMock = findSnapshotResponse(request.method, request.url);
       addRequest(request);
 
+      if (snapshotMock && !shouldLetServiceWorkerMock()) {
+        await wait(snapshotMock.delay);
+        const response = new Response(snapshotMock.body, {
+          status: snapshotMock.status,
+          headers: snapshotMock.headers
+        });
+        finishRequest(request.id, {
+          status: snapshotMock.status,
+          duration: performance.now() - startedAt,
+          responseHeaders: objectFromHeaders(response.headers),
+          responseText: snapshotMock.body,
+          mocked: true,
+          snapshotted: true,
+          mockId: snapshotMock.id
+        });
+        return response;
+      }
+
+      const mock = findMock(request.method, request.url);
       if (mock && !shouldLetServiceWorkerMock()) {
         await wait(mock.delay);
         const response = new Response(mock.body, {
@@ -250,12 +360,14 @@
         const cloned = response.clone();
         const responseText = await readResponseText(cloned);
         const mocked = response.headers.get("x-mocktools-mocked") === "1";
+        const snapshotted = response.headers.get("x-mocktools-snapshotted") === "1";
         finishRequest(request.id, {
           status: response.status,
           duration: performance.now() - startedAt,
           responseHeaders: objectFromHeaders(response.headers),
           responseText,
           mocked,
+          snapshotted,
           mockId: response.headers.get("x-mocktools-mock-id") || ""
         });
         return response;
@@ -338,9 +450,15 @@
           mocked: false,
           error: ""
         };
-        const mock = findMock(meta.method, meta.url);
+        const snapshotMock = findSnapshotResponse(meta.method, meta.url);
         addRequest(record);
 
+        if (snapshotMock && !shouldLetServiceWorkerMock()) {
+          respondWithMockXhr(xhr, record.id, snapshotMock, meta.startTime);
+          return undefined;
+        }
+
+        const mock = findMock(meta.method, meta.url);
         if (mock && !shouldLetServiceWorkerMock()) {
           respondWithMockXhr(xhr, record.id, mock, meta.startTime);
           return undefined;
@@ -353,6 +471,7 @@
             responseHeaders: parseRawHeaders(xhr.getAllResponseHeaders()),
             responseText: String(xhr.responseText || ""),
             mocked: xhr.getResponseHeader("x-mocktools-mocked") === "1",
+            snapshotted: xhr.getResponseHeader("x-mocktools-snapshotted") === "1",
             mockId: xhr.getResponseHeader("x-mocktools-mock-id") || ""
           });
         });
@@ -386,7 +505,8 @@
         responseHeaders: mock.headers || {},
         responseText: mock.body,
         mocked: true,
-        mockId: mock.id
+        mockId: mock.id,
+        snapshotted: !!mock.snapshotted
       });
       xhr.dispatchEvent(new Event("readystatechange"));
       xhr.dispatchEvent(new Event("load"));
@@ -414,6 +534,49 @@
       request.id === id ? { ...request, ...patch } : request
     );
     notify();
+  }
+
+  function findSnapshotResponse(method, url) {
+    if (!state.activeSnapshotId) return null;
+    const activeSnap = state.snapshots.find((s) => s.id === state.activeSnapshotId);
+    if (!activeSnap) return null;
+
+    const rule = activeSnap.rules.find((r) => {
+      const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
+      return methodMatches && patternMatches(r.pattern, url);
+    });
+    if (!rule || !rule.responses || rule.responses.length === 0) return null;
+
+    if (state.playbackIndices[rule.id] === undefined) {
+      state.playbackIndices[rule.id] = 0;
+    }
+    const idx = state.playbackIndices[rule.id];
+    let response = null;
+
+    if (idx < rule.responses.length) {
+      response = rule.responses[idx];
+      state.playbackIndices[rule.id] = idx + 1;
+    } else {
+      const overflow = rule.overflow || "repeat-last";
+      if (overflow === "repeat-last") {
+        response = rule.responses[rule.responses.length - 1];
+      } else if (overflow === "loop") {
+        state.playbackIndices[rule.id] = 1;
+        response = rule.responses[0];
+      } else {
+        return null; // bypass to normal mocks or network
+      }
+    }
+
+    return {
+      status: Number(response.status || 200),
+      delay: Number(response.delay || 0),
+      headers: response.headers || { "content-type": "application/json" },
+      body: response.body || "",
+      id: rule.id,
+      mocked: true,
+      snapshotted: true
+    };
   }
 
   function findMock(method, url) {
@@ -580,6 +743,10 @@
 
     root.querySelector("[data-open]")?.addEventListener("click", () => {
       state.expanded = true;
+      if (state.activeSnapshotId) {
+        state.activeRightTab = "snapshots";
+        state.selectedSnapshotId = state.activeSnapshotId;
+      }
       notify();
     });
     root.querySelector("[data-close]")?.addEventListener("click", () => {
@@ -590,6 +757,108 @@
     root.querySelector("[data-clear]")?.addEventListener("click", () => {
       state.requests = [];
       state.selectedId = null;
+      notify();
+    });
+    root.querySelector("[data-enter-snapshot-mode]")?.addEventListener("click", () => {
+      state.snapshotSelectionMode = !state.snapshotSelectionMode;
+      if (state.snapshotSelectionMode) {
+        let displayRequests = [...state.requests];
+        if (state.requestSearch) {
+          const q = state.requestSearch.toLowerCase();
+          displayRequests = displayRequests.filter((req) => req.url.toLowerCase().includes(q));
+        }
+        if (state.requestSearchStatus) {
+          const q = state.requestSearchStatus.toLowerCase();
+          displayRequests = displayRequests.filter((req) => String(req.status).toLowerCase().includes(q));
+        }
+        state.selectedSnapshotRequestIds = new Set(displayRequests.map((r) => r.id));
+      } else {
+        state.selectedSnapshotRequestIds.clear();
+      }
+      notify();
+    });
+    root.querySelector("[data-snapshot-select-all]")?.addEventListener("click", () => {
+      let displayRequests = [...state.requests];
+      if (state.requestSearch) {
+        const q = state.requestSearch.toLowerCase();
+        displayRequests = displayRequests.filter((req) => req.url.toLowerCase().includes(q));
+      }
+      if (state.requestSearchStatus) {
+        const q = state.requestSearchStatus.toLowerCase();
+        displayRequests = displayRequests.filter((req) => String(req.status).toLowerCase().includes(q));
+      }
+      state.selectedSnapshotRequestIds = new Set(displayRequests.map((r) => r.id));
+      notify();
+    });
+    root.querySelector("[data-snapshot-deselect-all]")?.addEventListener("click", () => {
+      state.selectedSnapshotRequestIds.clear();
+      notify();
+    });
+    root.querySelectorAll("[data-toggle-snapshot-select]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const reqId = checkbox.getAttribute("data-toggle-snapshot-select");
+        if (checkbox.checked) {
+          state.selectedSnapshotRequestIds.add(reqId);
+        } else {
+          state.selectedSnapshotRequestIds.delete(reqId);
+        }
+        notify();
+      });
+    });
+    root.querySelector("[data-save-snapshot-cancel]")?.addEventListener("click", () => {
+      state.snapshotSelectionMode = false;
+      state.selectedSnapshotRequestIds.clear();
+      notify();
+    });
+    root.querySelector("[data-save-snapshot-confirm]")?.addEventListener("click", () => {
+      const name = window.prompt("Enter a name for this snapshot:", `Scenario-${new Date().toISOString().slice(0, 19).replace('T', ' ')}`);
+      if (!name) return;
+
+      const selectedReqs = state.requests
+        .filter((r) => state.selectedSnapshotRequestIds.has(r.id) && r.status !== "pending")
+        .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+      if (selectedReqs.length === 0) {
+        window.alert("No completed requests selected!");
+        return;
+      }
+
+      const rulesMap = new Map();
+      selectedReqs.forEach((req) => {
+        const pattern = mockPatternFromUrl(req.url);
+        const key = `${req.method}::${pattern}`;
+        if (!rulesMap.has(key)) {
+          rulesMap.set(key, {
+            id: `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            method: req.method,
+            pattern: pattern,
+            overflow: "repeat-last",
+            responses: []
+          });
+        }
+        const rule = rulesMap.get(key);
+        rule.responses.push({
+          status: Number(req.status || 200),
+          delay: 200,
+          headers: req.responseHeaders || { "content-type": "application/json" },
+          body: req.responseText || ""
+        });
+      });
+
+      const newSnapshot = {
+        id: `snap-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        name: name,
+        createdAt: new Date().toISOString(),
+        rules: Array.from(rulesMap.values())
+      };
+
+      state.snapshots.push(newSnapshot);
+      state.selectedSnapshotId = newSnapshot.id;
+      state.activeRightTab = "snapshots";
+      state.snapshotSelectionMode = false;
+      state.selectedSnapshotRequestIds.clear();
+
+      persistSnapshots(state.snapshots);
       notify();
     });
     root.querySelector("[data-add-mock]")?.addEventListener("click", () => {
@@ -611,6 +880,8 @@
     });
     root.querySelector("[data-export-mocks]")?.addEventListener("click", exportMocks);
     root.querySelector("[data-import-mocks]")?.addEventListener("click", importMocksFromFile);
+    root.querySelector("[data-export-snapshots]")?.addEventListener("click", exportSnapshots);
+    root.querySelector("[data-import-snapshots]")?.addEventListener("click", importSnapshotsFromFile);
     root.querySelectorAll("[data-request-id]").forEach((item) => {
       item.addEventListener("click", () => {
         state.selectedId = item.getAttribute("data-request-id");
@@ -935,6 +1206,236 @@
       });
     });
 
+    root.querySelectorAll("[data-mode-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.activeRightTab = button.getAttribute("data-mode-tab");
+        notify();
+      });
+    });
+
+    root.querySelectorAll("[data-select-snapshot]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.selectedSnapshotId = button.getAttribute("data-select-snapshot");
+        notify();
+      });
+    });
+
+    root.querySelector("[data-global-toggle-snapshot]")?.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        state.activeSnapshotId = state.selectedSnapshotId || (state.snapshots[0] ? state.snapshots[0].id : null);
+        if (state.activeSnapshotId) {
+          state.selectedSnapshotId = state.activeSnapshotId;
+        }
+      } else {
+        state.activeSnapshotId = null;
+      }
+      state.playbackIndices = {};
+      persistActiveSnapshotId(state.activeSnapshotId);
+      syncServiceWorkerSnapshot();
+      notify();
+    });
+
+    root.querySelector("[data-rename-snapshot]")?.addEventListener("change", (e) => {
+      const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+      if (snapshot) {
+        snapshot.name = e.target.value;
+        persistSnapshots(state.snapshots);
+        notify();
+      }
+    });
+
+    root.querySelector("[data-toggle-active-snapshot]")?.addEventListener("click", () => {
+      if (state.activeSnapshotId === state.selectedSnapshotId) {
+        state.activeSnapshotId = null;
+      } else {
+        state.activeSnapshotId = state.selectedSnapshotId;
+      }
+      state.playbackIndices = {};
+      persistActiveSnapshotId(state.activeSnapshotId);
+      syncServiceWorkerSnapshot();
+      notify();
+    });
+
+    root.querySelector("[data-delete-snapshot]")?.addEventListener("click", () => {
+      if (!state.selectedSnapshotId) return;
+      if (!window.confirm("Are you sure you want to delete this snapshot?")) return;
+
+      state.snapshots = state.snapshots.filter((s) => s.id !== state.selectedSnapshotId);
+      if (state.activeSnapshotId === state.selectedSnapshotId) {
+        state.activeSnapshotId = null;
+        persistActiveSnapshotId(null);
+        syncServiceWorkerSnapshot();
+      }
+      state.selectedSnapshotId = state.snapshots[0]?.id || null;
+      persistSnapshots(state.snapshots);
+      notify();
+    });
+
+    root.querySelectorAll("[data-rule-field]").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
+        const field = el.getAttribute("data-rule-field");
+        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+        if (snapshot && snapshot.rules[ruleIdx]) {
+          let val = e.target.value;
+          snapshot.rules[ruleIdx][field] = val;
+          persistSnapshots(state.snapshots);
+          if (snapshot.id === state.activeSnapshotId) {
+            syncServiceWorkerSnapshot();
+          }
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-delete-snapshot-rule]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-delete-snapshot-rule"), 10);
+        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+        if (snapshot && snapshot.rules[ruleIdx]) {
+          snapshot.rules.splice(ruleIdx, 1);
+          persistSnapshots(state.snapshots);
+          if (snapshot.id === state.activeSnapshotId) {
+            syncServiceWorkerSnapshot();
+          }
+          notify();
+        }
+      });
+    });
+
+    root.querySelector("[data-add-snapshot-rule]")?.addEventListener("click", () => {
+      const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+      if (snapshot) {
+        snapshot.rules.push({
+          id: `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          method: "GET",
+          pattern: "/api/new-pattern",
+          overflow: "repeat-last",
+          responses: [
+            { status: 200, delay: 200, headers: { "content-type": "application/json" }, body: "{}" }
+          ]
+        });
+        persistSnapshots(state.snapshots);
+        if (snapshot.id === state.activeSnapshotId) {
+          syncServiceWorkerSnapshot();
+        }
+        notify();
+      }
+    });
+
+    root.querySelectorAll("[data-delete-snapshot-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const val = button.getAttribute("data-delete-snapshot-step");
+        const parts = val.split("-");
+        const ruleIdx = parseInt(parts[0], 10);
+        const stepIdx = parseInt(parts[1], 10);
+        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+        if (snapshot && snapshot.rules[ruleIdx] && snapshot.rules[ruleIdx].responses[stepIdx]) {
+          snapshot.rules[ruleIdx].responses.splice(stepIdx, 1);
+          persistSnapshots(state.snapshots);
+          if (snapshot.id === state.activeSnapshotId) {
+            syncServiceWorkerSnapshot();
+          }
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-add-snapshot-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-add-snapshot-step"), 10);
+        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+        if (snapshot && snapshot.rules[ruleIdx]) {
+          const lastResp = snapshot.rules[ruleIdx].responses[snapshot.rules[ruleIdx].responses.length - 1];
+          snapshot.rules[ruleIdx].responses.push({
+            status: lastResp ? lastResp.status : 200,
+            delay: lastResp ? lastResp.delay : 0,
+            headers: lastResp ? JSON.parse(JSON.stringify(lastResp.headers)) : { "content-type": "application/json" },
+            body: lastResp ? lastResp.body : "{}"
+          });
+          persistSnapshots(state.snapshots);
+          if (snapshot.id === state.activeSnapshotId) {
+            syncServiceWorkerSnapshot();
+          }
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-snapshot-field]").forEach((el) => {
+      el.addEventListener("change", (e) => {
+        const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
+        const stepIdx = parseInt(el.getAttribute("data-step-idx"), 10);
+        const field = el.getAttribute("data-snapshot-field");
+        const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+        if (snapshot && snapshot.rules[ruleIdx] && snapshot.rules[ruleIdx].responses[stepIdx]) {
+          let val = e.target.value;
+          if (field === "status" || field === "delay") {
+            val = Number(val || 0);
+          } else if (field === "headers") {
+            try {
+              val = JSON.parse(val);
+            } catch (_err) {
+              return;
+            }
+          }
+          snapshot.rules[ruleIdx].responses[stepIdx][field] = val;
+          persistSnapshots(state.snapshots);
+          if (snapshot.id === state.activeSnapshotId) {
+            syncServiceWorkerSnapshot();
+          }
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-create-snapshot-from-url]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const targetUrl = item.getAttribute("data-create-snapshot-from-url");
+        const pattern = mockPatternFromUrl(targetUrl);
+        const name = window.prompt("Enter a name for this snapshot:", `Sequence-${pattern}`);
+        if (!name) return;
+
+        const method = state.requests.find(r => r.url === targetUrl)?.method || "GET";
+        const selectedReqs = state.requests
+          .filter((r) => r.method === method && mockPatternFromUrl(r.url) === pattern && r.status !== "pending")
+          .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
+
+        if (selectedReqs.length === 0) {
+          window.alert("No matching requests found in log!");
+          return;
+        }
+
+        const rule = {
+          id: `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          method: method,
+          pattern: pattern,
+          overflow: "repeat-last",
+          responses: selectedReqs.map((req) => ({
+            status: Number(req.status || 200),
+            delay: 200,
+            headers: req.responseHeaders || { "content-type": "application/json" },
+            body: req.responseText || ""
+          }))
+        };
+
+        const newSnapshot = {
+          id: `snap-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name: name,
+          createdAt: new Date().toISOString(),
+          rules: [rule]
+        };
+
+        state.snapshots.push(newSnapshot);
+        state.selectedSnapshotId = newSnapshot.id;
+        state.activeRightTab = "snapshots";
+        state.contextMenu = null;
+
+        persistSnapshots(state.snapshots);
+        notify();
+      });
+    });
+
   }
 
   function saveMockFromForm(root, id) {
@@ -1005,6 +1506,58 @@
         saveMocks();
       } catch (error) {
         window.alert(`Import failed: ${error.message || "invalid file"}`);
+      }
+    });
+    input.click();
+  }
+
+  function exportSnapshots() {
+    const selectedSnap = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+    if (!selectedSnap) return;
+    const payload = {
+      version: 1,
+      type: "snapshot-backup",
+      exportedAt: new Date().toISOString(),
+      snapshot: selectedSnap
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mocktools-snapshot-${selectedSnap.name.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importSnapshotsFromFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const content = await file.text();
+        const parsed = JSON.parse(content);
+        const importedSnap = parsed.snapshot;
+        if (!importedSnap || !importedSnap.name || !Array.isArray(importedSnap.rules)) {
+          throw new Error("Invalid snapshot backup file");
+        }
+        importedSnap.id = `snap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        importedSnap.rules.forEach((rule) => {
+          rule.id = `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        });
+        state.snapshots.push(importedSnap);
+        state.selectedSnapshotId = importedSnap.id;
+        state.activeRightTab = "snapshots";
+        persistSnapshots(state.snapshots);
+        notify();
+      } catch (error) {
+        window.alert(`Snapshot import failed: ${error.message || "invalid file"}`);
       }
     });
     input.click();
@@ -1111,6 +1664,12 @@
             <span>${state.requests.length} request${state.requests.length === 1 ? "" : "s"}</span>
           </div>
           <nav>
+            <button type="button" data-enter-snapshot-mode class="icon-btn${state.snapshotSelectionMode ? " active" : ""}" title="Capture requests as Snapshot">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+            </button>
             <button type="button" data-clear class="icon-btn" title="Clear requests">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 5L12 12"></path>
@@ -1129,14 +1688,28 @@
         </header>
         <div class="grid">
           <aside class="request-list">
-            <div class="request-filter">
-              <input type="text" placeholder="Filter URL..." class="search-input" data-search-input value="${escapeAttr(state.requestSearch)}" />
-              <input type="text" placeholder="Status" class="search-input" data-status-filter value="${escapeAttr(state.requestSearchStatus)}" style="flex: 0 0 54px; width: 54px; text-align: center; padding: 0 4px;" />
-              <select class="sort-select" data-sort-select>
-                <option value="newest" ${state.requestSort === "newest" ? "selected" : ""}>Newest</option>
-                <option value="oldest" ${state.requestSort === "oldest" ? "selected" : ""}>Oldest</option>
-              </select>
-            </div>
+            ${state.snapshotSelectionMode ? `
+              <div class="request-filter selection-toolbar" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; background: #e0f2fe; border-bottom: 1px solid #bae6fd;">
+                <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotRequestIds.size}</span>
+                <div style="display: flex; gap: 4px;">
+                  <button type="button" class="mini-btn" data-snapshot-select-all style="padding: 2px 6px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a;">All</button>
+                  <button type="button" class="mini-btn" data-snapshot-deselect-all style="padding: 2px 6px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569;">None</button>
+                </div>
+                <div style="display: flex; gap: 6px; margin-left: auto;">
+                  <button type="button" data-save-snapshot-confirm style="background: #10b981; color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Save</button>
+                  <button type="button" data-save-snapshot-cancel style="background: #cbd5e1; color: #334155; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Cancel</button>
+                </div>
+              </div>
+            ` : `
+              <div class="request-filter">
+                <input type="text" placeholder="Filter URL..." class="search-input" data-search-input value="${escapeAttr(state.requestSearch)}" />
+                <input type="text" placeholder="Status" class="search-input" data-status-filter value="${escapeAttr(state.requestSearchStatus)}" style="flex: 0 0 54px; width: 54px; text-align: center; padding: 0 4px;" />
+                <select class="sort-select" data-sort-select>
+                  <option value="newest" ${state.requestSort === "newest" ? "selected" : ""}>Newest</option>
+                  <option value="oldest" ${state.requestSort === "oldest" ? "selected" : ""}>Oldest</option>
+                </select>
+              </div>
+            `}
             <div class="request-items">
               ${displayRequests.length ? displayRequests.map(requestRow).join("") : emptyState(state.requests.length ? "No matches" : "No requests yet")}
             </div>
@@ -1145,34 +1718,70 @@
             ${selected ? detailTemplate(selected) : emptyState("Select a request")}
           </section>
           <aside class="mock-editor">
-            <div class="mock-head">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <strong>Mock rules</strong>
-                <label class="toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
-                  <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
-                  <span class="switch" aria-hidden="true"></span>
-                </label>
-              </div>
-              <div class="mock-head-actions">
-                <button type="button" data-add-mock title="Add mock rule">Add</button>
-                <button type="button" data-import-mocks title="Import mock backup">Import</button>
-                <button type="button" data-export-mocks title="Export mock backup">Export</button>
-              </div>
+            <!-- Mode Tabs -->
+            <div class="mode-tabs" style="display: flex; border-bottom: 1px solid #d9e1ee; background: #f8fafc;">
+              <button class="mode-tab${state.activeRightTab === "mocks" ? " active" : ""}" type="button" data-mode-tab="mocks" style="flex: 1; padding: 10px; border: none; border-bottom: 2px solid ${state.activeRightTab === "mocks" ? "#2563eb" : "transparent"}; background: transparent; color: ${state.activeRightTab === "mocks" ? "#2563eb" : "#64748b"}; font-weight: 600; cursor: pointer; text-align: center; font-size: 12px;">Mock Rules</button>
+              <button class="mode-tab${state.activeRightTab === "snapshots" ? " active" : ""}" type="button" data-mode-tab="snapshots" style="flex: 1; padding: 10px; border: none; border-bottom: 2px solid ${state.activeRightTab === "snapshots" ? "#2563eb" : "transparent"}; background: transparent; color: ${state.activeRightTab === "snapshots" ? "#2563eb" : "#64748b"}; font-weight: 600; cursor: pointer; text-align: center; font-size: 12px;">Snapshots</button>
             </div>
-            ${groupTabsHtml}
-            <div class="mock-layout">
-              <div class="mock-list">
-                ${filteredGroups.length ? filteredGroups.sort((a, b) => {
-                  const aActive = a.activeMock ? 1 : 0;
-                  const bActive = b.activeMock ? 1 : 0;
-                  if (aActive !== bActive) return bActive - aActive;
-                  return a.key.localeCompare(b.key);
-                }).map(mockListRow).join("") : emptyState("No mock rules")}
+            
+            ${state.activeRightTab === "mocks" ? `
+              <!-- Mocks Mode UI -->
+              <div class="tab-content mocks-content">
+                <div class="mock-head">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong>Mock rules</strong>
+                    <label class="toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
+                      <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
+                      <span class="switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="mock-head-actions">
+                    <button type="button" data-add-mock title="Add mock rule">Add</button>
+                    <button type="button" data-import-mocks title="Import mock backup">Import</button>
+                    <button type="button" data-export-mocks title="Export mock backup">Export</button>
+                  </div>
+                </div>
+                ${groupTabsHtml}
+                <div class="mock-layout">
+                  <div class="mock-list">
+                    ${filteredGroups.length ? filteredGroups.sort((a, b) => {
+                      const aActive = a.activeMock ? 1 : 0;
+                      const bActive = b.activeMock ? 1 : 0;
+                      if (aActive !== bActive) return bActive - aActive;
+                      return a.key.localeCompare(b.key);
+                    }).map(mockListRow).join("") : emptyState("No mock rules")}
+                  </div>
+                  <div class="mock-detail">
+                    ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
+                  </div>
+                </div>
               </div>
-              <div class="mock-detail">
-                ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
+            ` : `
+              <!-- Snapshots Mode UI -->
+              <div class="tab-content snapshots-content">
+                <div class="mock-head">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <strong>Snapshots</strong>
+                    <label class="toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
+                      <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
+                      <span class="switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="mock-head-actions">
+                    <button type="button" data-import-snapshots title="Import snapshot backup">Import</button>
+                    <button type="button" data-export-snapshots title="Export snapshot backup" ${state.selectedSnapshotId ? "" : "disabled"}>Export</button>
+                  </div>
+                </div>
+                <div class="mock-layout">
+                  <div class="mock-list">
+                    ${state.snapshots.length ? state.snapshots.map(snapshotListRow).join("") : emptyState("No snapshots")}
+                  </div>
+                  <div class="mock-detail">
+                    ${state.selectedSnapshotId ? snapshotDetailTemplate() : emptyState("Select a snapshot")}
+                  </div>
+                </div>
               </div>
-            </div>
+            `}
           </aside>
         </div>
         ${state.contextMenu ? contextMenuTemplate(state.contextMenu) : ""}
@@ -1213,10 +1822,19 @@
 
   function requestRow(request) {
     const active = request.id === state.selectedId ? " active" : "";
-    const mocked = request.mocked ? " mocked" : "";
-    const mockLabel = request.mocked ? "Mocked request" : "Passthrough request";
+    const mocked = (request.mocked || request.snapshotted) ? " mocked" : "";
+    const mockLabel = request.snapshotted ? "Snapshotted request" : request.mocked ? "Mocked request" : "Passthrough request";
+    const selectionClass = state.snapshotSelectionMode ? " selection-active" : "";
+    
+    let checkboxHtml = "";
+    if (state.snapshotSelectionMode) {
+      const isChecked = state.selectedSnapshotRequestIds.has(request.id) ? "checked" : "";
+      checkboxHtml = `<input type="checkbox" class="snapshot-select-checkbox" data-toggle-snapshot-select="${escapeAttr(request.id)}" ${isChecked} style="width: 12px; height: 12px; margin-right: 6px; cursor: pointer; flex-shrink: 0;" onclick="event.stopPropagation();" />`;
+    }
+
     return `
-      <button class="request-row${active}${mocked}" type="button" data-request-id="${escapeAttr(request.id)}">
+      <button class="request-row${active}${mocked}${selectionClass}" type="button" data-request-id="${escapeAttr(request.id)}">
+        ${checkboxHtml}
         <span class="mock-dot" title="${mockLabel}" aria-label="${mockLabel}"></span>
         <span class="method">${escapeHtml(request.method)}</span>
         <span class="url">${escapeHtml(shortUrl(request.url))}</span>
@@ -1238,6 +1856,102 @@
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
       </button>
+    `;
+  }
+
+  function snapshotListRow(snapshot) {
+    const active = snapshot.id === state.selectedSnapshotId ? " active" : "";
+    const enabled = snapshot.id === state.activeSnapshotId ? " enabled" : "";
+    const totalSteps = snapshot.rules.reduce((acc, r) => acc + (r.responses ? r.responses.length : 0), 0);
+    return `
+      <button class="mock-row${active}${enabled}" type="button" data-select-snapshot="${escapeAttr(snapshot.id)}">
+        <span class="rule-dot" aria-hidden="true"></span>
+        <span class="rule-main">
+          <strong>${escapeHtml(snapshot.name)}</strong>
+          <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
+        </span>
+        <span class="rule-status ${enabled ? "status-2xx" : "status-other"}">${enabled ? "ON" : "OFF"}</span>
+      </button>
+    `;
+  }
+
+  function snapshotDetailTemplate() {
+    const snapshot = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
+    if (!snapshot) return emptyState("Select a snapshot");
+
+    const isActive = snapshot.id === state.activeSnapshotId;
+
+    const rulesHtml = snapshot.rules.map((rule, ruleIdx) => {
+      const stepsHtml = (rule.responses || []).map((resp, stepIdx) => {
+        const stepNum = stepIdx + 1;
+        return `
+          <div class="step-card" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; font-weight: 700; color: #475569;">Step ${stepNum}</span>
+              <button type="button" class="mini-btn" data-delete-snapshot-step="${ruleIdx}-${stepIdx}" style="color: #ef4444; border: none; background: transparent; cursor: pointer; padding: 2px;">Delete Step</button>
+            </div>
+            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+              <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Status
+                <input type="number" value="${resp.status}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
+              </label>
+              <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Delay (ms)
+                <input type="number" value="${resp.delay}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="width: 100%; font-size: 11px; padding: 2px 4px;" />
+              </label>
+            </div>
+            <label style="display: block; font-size: 10px; margin-bottom: 4px;">Headers (JSON)
+              <textarea data-snapshot-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" rows="1" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}))}</textarea>
+            </label>
+            <label style="display: block; font-size: 10px; margin-bottom: 0;">Body
+              <textarea data-snapshot-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
+            </label>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div class="snapshot-rule-card" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
+          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+            <select data-rule-field="method" data-rule-idx="${ruleIdx}" style="font-size: 11px;">
+              ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${rule.method === m ? "selected" : ""}>${m}</option>`).join("")}
+            </select>
+            <input type="text" value="${escapeAttr(rule.pattern)}" data-rule-field="pattern" data-rule-idx="${ruleIdx}" style="flex-grow: 1; font-size: 11px; padding: 2px 6px;" placeholder="URL pattern" />
+            <button type="button" class="mini-btn" data-delete-snapshot-rule="${ruleIdx}" style="color: #ef4444; font-size: 11px; border: none; background: transparent; cursor: pointer;">Delete Rule</button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="font-size: 10px; color: #64748b;">On overflow:</span>
+            <select data-rule-field="overflow" data-rule-idx="${ruleIdx}" style="font-size: 10px; padding: 2px;">
+              <option value="repeat-last" ${rule.overflow === "repeat-last" ? "selected" : ""}>Repeat last step</option>
+              <option value="loop" ${rule.overflow === "loop" ? "selected" : ""}>Loop back to start</option>
+            </select>
+          </div>
+          <div class="steps-container">
+            ${stepsHtml}
+          </div>
+          <button type="button" data-add-snapshot-step="${ruleIdx}" style="width: 100%; padding: 4px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #fff; font-size: 11px; cursor: pointer; color: #475569;">+ Add Response Step</button>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div style="padding: 12px;">
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
+          <label style="font-size: 11px; font-weight: 700; margin-bottom: 0;">Snapshot Name
+            <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 13px; padding: 4px 8px; margin-top: 4px;" />
+          </label>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <button type="button" data-toggle-active-snapshot class="action-btn" style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: ${isActive ? "#ef4444" : "#2563eb"}; color: white; border: none;">
+              ${isActive ? "Deactivate Snapshot" : "Activate Snapshot"}
+            </button>
+            <button type="button" data-delete-snapshot style="padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #fff; color: #ef4444; border: 1px solid #ef4444;">
+              Delete
+            </button>
+          </div>
+        </div>
+        <div class="snapshot-rules-list">
+          ${rulesHtml}
+        </div>
+        <button type="button" data-add-snapshot-rule style="width: 100%; padding: 8px; border: 1px dashed #2563eb; border-radius: 6px; background: #f0f9ff; font-size: 12px; font-weight: 600; cursor: pointer; color: #2563eb; margin-top: 8px;">+ Add Intercept Rule</button>
+      </div>
     `;
   }
 
@@ -1319,7 +2033,7 @@
       <div class="meta">
         <span>Status: <strong class="${statusClass(request.status)}" style="font-weight: 700;">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
-        <span>${request.mocked ? "Mocked" : "Passthrough"}</span>
+        <span>${request.snapshotted ? "Snapshotted" : request.mocked ? "Mocked" : "Passthrough"}</span>
         <span>${Math.round(request.duration)}ms</span>
       </div>
       ${request.error ? `<p class="error">${escapeHtml(request.error)}</p>` : ""}
@@ -1907,8 +2621,19 @@
       .mock-editor {
         background: #fff;
         display: grid;
-        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
         min-height: 0;
+      }
+      .tab-content {
+        display: grid;
+        min-height: 0;
+        height: 100%;
+      }
+      .tab-content.mocks-content {
+        grid-template-rows: auto auto minmax(0, 1fr);
+      }
+      .tab-content.snapshots-content {
+        grid-template-rows: auto minmax(0, 1fr);
       }
       .mock-group-tabs {
         display: flex;
@@ -2394,6 +3119,63 @@
         width: 32px;
         height: 32px;
         color: #94a3b8;
+      }
+      .request-row.selection-active {
+        grid-template-columns: 20px 10px 42px minmax(0, 1fr) 42px 46px !important;
+      }
+      .icon-btn.active {
+        background: #e0f2fe !important;
+        color: #0369a1 !important;
+        border-color: #bae6fd !important;
+        box-shadow: 0 0 6px rgba(3, 105, 161, 0.3);
+      }
+      .mode-tab:hover {
+        background: #f1f5f9;
+        color: #1e293b !important;
+      }
+      .mode-tab.active {
+        border-bottom-color: #2563eb !important;
+        background: #fff !important;
+      }
+      .mini-btn {
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #475569;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .mini-btn:hover {
+        background: #f1f5f9;
+        color: #1e293b;
+        border-color: #94a3b8;
+      }
+      .snapshot-rule-card select, .snapshot-rule-card input {
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background: #fff;
+        color: #1e293b;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+      .snapshot-rule-card select:focus, .snapshot-rule-card input:focus {
+        border-color: #2563eb;
+      }
+      .step-card label {
+        font-weight: 600;
+        color: #64748b;
+      }
+      .step-card input, .step-card textarea {
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background: #fff;
+        color: #1e293b;
+        outline: none;
+        transition: border-color 0.2s ease;
+      }
+      .step-card input:focus, .step-card textarea:focus {
+        border-color: #2563eb;
       }
       @media (max-width: 900px) {
         .devtools { left: 0; right: 0; height: 92vh; }
