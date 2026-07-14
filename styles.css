@@ -64,7 +64,7 @@ button.secondary:hover {
 
 .shell {
   margin: 0 auto;
-  max-width: 1180px;
+  max-width: 1600px;
   padding: 48px 24px;
 }
 
@@ -108,7 +108,7 @@ h1 {
 .workspace {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+  grid-template-columns: 1fr 360px;
 }
 
 .panel {
