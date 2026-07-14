@@ -11,6 +11,30 @@
   box-sizing: border-box;
 }
 
+.github-corner {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 6px 10px;
+  border-radius: 8px;
+  background: rgba(30, 41, 59, 0.85);
+  color: #f1f5f9;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background 0.2s, transform 0.15s;
+}
+.github-corner:hover {
+  background: rgba(30, 41, 59, 1);
+  transform: translateY(-1px);
+}
+
 body {
   margin: 0;
   background-color:#edf4fa;
