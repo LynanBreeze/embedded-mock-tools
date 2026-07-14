@@ -643,6 +643,19 @@
     const root = document.createElement("div");
     shadow.append(style, root);
 
+    // Create elements once
+    let floatBtn = root.querySelector(".float-button");
+    let devtools = root.querySelector(".devtools");
+
+    if (!floatBtn || !devtools) {
+      root.innerHTML = `
+        <button class="float-button" type="button" title="Open Network Mock panel"></button>
+        <section class="devtools"></section>
+      `;
+      floatBtn = root.querySelector(".float-button");
+      devtools = root.querySelector(".devtools");
+    }
+
     const render = () => {
       const activeElement = shadow.activeElement;
       const focusedSelector = activeElement && (
@@ -670,7 +683,47 @@
         }
       });
 
-      root.innerHTML = state.expanded ? panelTemplate() : buttonTemplate();
+      // Update Float Button
+      const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
+      if (state.floatButtonTucked) {
+        const viewWidth = document.documentElement.clientWidth;
+        const viewHeight = document.documentElement.clientHeight;
+        const btnHeight = 42;
+        floatBtn.style.left = `${viewWidth - 12}px`;
+        floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
+        floatBtn.style.bottom = "auto";
+        floatBtn.style.right = "auto";
+        floatBtn.style.position = "fixed";
+        floatBtn.style.opacity = "0.62";
+        floatBtn.classList.add("tucked");
+      } else {
+        floatBtn.style.left = "";
+        floatBtn.style.top = "";
+        floatBtn.style.bottom = "";
+        floatBtn.style.right = "";
+        floatBtn.style.position = "";
+        floatBtn.style.opacity = "";
+        floatBtn.classList.remove("tucked");
+      }
+
+      const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
+      floatBtn.innerHTML = `
+        <span class="indicator-dot ${state.mockEnabled ? "active" : ""}" title="${statusTitle}"></span>
+        <span>Net</span>
+        <b>${state.requests.length}</b>
+        <small>${activeMocks} mock${activeMocks === 1 ? "" : "s"}</small>
+      `;
+
+      devtools.innerHTML = panelTemplate();
+
+      if (state.expanded) {
+        devtools.classList.add("expanded");
+        floatBtn.classList.add("hidden");
+      } else {
+        devtools.classList.remove("expanded");
+        floatBtn.classList.remove("hidden");
+      }
+
       bindPanelEvents(root);
 
       // Restore scroll positions
@@ -697,7 +750,8 @@
   function bindPanelEvents(root) {
     const floatBtn = root.querySelector(".float-button");
 
-    if (floatBtn) {
+    if (floatBtn && !floatBtn._eventsBound) {
+      floatBtn._eventsBound = true;
       let idleTimer = null;
 
       const startIdleTimer = () => {
@@ -732,7 +786,7 @@
         const viewWidth = document.documentElement.clientWidth;
         const viewHeight = document.documentElement.clientHeight;
 
-        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease";
+        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
         floatBtn.style.left = `${viewWidth - 12}px`;
         floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
         floatBtn.style.bottom = "auto";
@@ -749,7 +803,7 @@
         const viewWidth = document.documentElement.clientWidth;
         const viewHeight = document.documentElement.clientHeight;
 
-        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease";
+        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
         floatBtn.style.left = `${viewWidth - 24 - btnWidth}px`;
         floatBtn.style.top = `${viewHeight - 80 - btnHeight}px`;
         floatBtn.style.bottom = "auto";
@@ -757,26 +811,26 @@
         floatBtn.style.opacity = "1";
       };
 
-      floatBtn.addEventListener("mouseenter", () => {
+      floatBtn.onmouseenter = () => {
         stopIdleTimer();
         untuckButton();
-      });
+      };
 
-      floatBtn.addEventListener("mouseleave", () => {
+      floatBtn.onmouseleave = () => {
         startIdleTimer();
-      });
+      };
+
+      floatBtn.onclick = () => {
+        state.expanded = true;
+        if (state.activeSnapshotId) {
+          state.activeRightTab = "snapshots";
+          state.selectedSnapshotId = state.activeSnapshotId;
+        }
+        notify();
+      };
 
       startIdleTimer();
     }
-
-    root.querySelector("[data-open]")?.addEventListener("click", () => {
-      state.expanded = true;
-      if (state.activeSnapshotId) {
-        state.activeRightTab = "snapshots";
-        state.selectedSnapshotId = state.activeSnapshotId;
-      }
-      notify();
-    });
     root.querySelector("[data-close]")?.addEventListener("click", () => {
       state.expanded = false;
       state.contextMenu = null;
@@ -1742,7 +1796,7 @@
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
-            <button type="button" class="primary-btn" data-close-settings-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Done</button>
+            <button type="button" class="primary-btn" data-close-settings-modal>Done</button>
           </div>
         </div>
       </div>
@@ -1775,7 +1829,7 @@
               ${endpointDetailTemplate(group)}
             </div>
             <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="primary-btn" data-close-details-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Close</button>
+              <button type="button" class="primary-btn" data-close-details-modal>Close</button>
             </div>
           </div>
         </div>
@@ -1795,7 +1849,7 @@
               ${snapshotDetailTemplate()}
             </div>
             <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="primary-btn" data-close-details-modal style="background: #2563eb; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer;">Close</button>
+              <button type="button" class="primary-btn" data-close-details-modal>Close</button>
             </div>
           </div>
         </div>
@@ -1849,7 +1903,6 @@
     `;
 
     return `
-      <section class="devtools">
         <header class="topbar">
           <div>
             <strong>Network Mock</strong>
@@ -1989,31 +2042,10 @@
         ${state.contextMenu ? contextMenuTemplate(state.contextMenu) : ""}
         ${settingsModalTemplate()}
         ${detailsModalTemplate()}
-      </section>
-    `;
-  }
-
-  function buttonTemplate() {
-    const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
-    let styleAttr = "";
-    let tuckedClass = "";
-    if (state.floatButtonTucked) {
-      const viewWidth = document.documentElement.clientWidth;
-      const viewHeight = document.documentElement.clientHeight;
-      const btnHeight = 42;
-      styleAttr = `style="left: ${viewWidth - 12}px; top: ${viewHeight - 80 - btnHeight}px; bottom: auto; right: auto; position: fixed; opacity: 0.62;"`;
-      tuckedClass = " tucked";
+      `;
     }
-    const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
-    return `
-      <button class="float-button${tuckedClass}" type="button" data-open ${styleAttr} title="Open Network Mock panel">
-        <span class="indicator-dot ${state.mockEnabled ? "active" : ""}" title="${statusTitle}"></span>
-        <span>Net</span>
-        <b>${state.requests.length}</b>
-        <small>${activeMocks} mock${activeMocks === 1 ? "" : "s"}</small>
-      </button>
-    `;
-  }
+
+
 
   function statusClass(status) {
     const s = String(status || "");
@@ -2097,7 +2129,7 @@
           <div class="step-card" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <span style="font-size: 11px; font-weight: 700; color: #475569;">Step ${stepNum}</span>
-              <button type="button" class="mini-btn" data-delete-snapshot-step="${ruleIdx}-${stepIdx}" style="color: #ef4444; border: none; background: transparent; cursor: pointer; padding: 2px;">Delete Step</button>
+              <button type="button" class="danger-text-btn" data-delete-snapshot-step="${ruleIdx}-${stepIdx}">Delete Step</button>
             </div>
             <div style="display: flex; gap: 6px; margin-bottom: 6px;">
               <label style="flex: 1; font-size: 10px; margin-bottom: 0;">Status
@@ -2144,7 +2176,7 @@
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${rule.method === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
             <input type="text" value="${escapeAttr(rule.pattern)}" data-rule-field="pattern" data-rule-idx="${ruleIdx}" style="flex-grow: 1; font-size: 11px; padding: 2px 6px;" placeholder="URL pattern" />
-            <button type="button" class="mini-btn" data-delete-snapshot-rule="${ruleIdx}" style="color: #ef4444; font-size: 11px; border: none; background: transparent; cursor: pointer;">Delete Rule</button>
+            <button type="button" class="danger-text-btn" data-delete-snapshot-rule="${ruleIdx}">Delete Rule</button>
           </div>
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
             <span style="font-size: 10px; color: #64748b;">On overflow:</span>
@@ -2156,7 +2188,7 @@
           <div class="steps-container">
             ${stepsHtml}
           </div>
-          <button type="button" data-add-snapshot-step="${ruleIdx}" style="width: 100%; padding: 4px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #fff; font-size: 11px; cursor: pointer; color: #475569;">+ Add Response Step</button>
+          <button type="button" data-add-snapshot-step="${ruleIdx}" class="dashed-btn">+ Add Response Step</button>
         </div>
       `;
     }).join("");
@@ -2168,19 +2200,19 @@
             <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 13px; padding: 4px 8px; margin-top: 4px;" />
           </label>
           <div style="display: flex; gap: 8px; margin-top: 4px;">
-            <button type="button" data-toggle-active-snapshot class="action-btn" style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: ${isActive ? "#ef4444" : "#2563eb"}; color: white; border: none;">
+            <button type="button" data-toggle-active-snapshot class="${isActive ? "danger" : "primary"}" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
               ${isActive ? "Deactivate Snapshot" : "Activate Snapshot"}
             </button>
-            <button type="button" data-delete-snapshot style="padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #fff; color: #ef4444; border: 1px solid #ef4444;">
+            <button type="button" data-delete-snapshot class="danger" style="font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
               Delete
             </button>
           </div>
           <div style="display: flex; gap: 8px; margin-top: 8px; border-top: 1px solid #edf2f7; padding-top: 8px;">
-            <button type="button" data-save-snapshot-edit style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #10b981; color: white; border: none; display: flex; align-items: center; justify-content: center; gap: 4px;">
+            <button type="button" data-save-snapshot-edit class="primary" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
               <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
               Save Rules
             </button>
-            <button type="button" data-cancel-snapshot-edit style="flex-grow: 1; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #fff; color: #475569; border: 1px solid #cbd5e1;">
+            <button type="button" data-cancel-snapshot-edit class="mini-btn" style="flex-grow: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
               Reset Draft
             </button>
           </div>
@@ -2188,7 +2220,7 @@
         <div class="snapshot-rules-list">
           ${rulesHtml}
         </div>
-        <button type="button" data-add-snapshot-rule style="width: 100%; padding: 8px; border: 1px dashed #2563eb; border-radius: 6px; background: #f0f9ff; font-size: 12px; font-weight: 600; cursor: pointer; color: #2563eb; margin-top: 8px;">+ Add Intercept Rule</button>
+        <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 8px;">+ Add Intercept Rule</button>
       </div>
     `;
   }
@@ -2485,9 +2517,17 @@
         position: fixed;
         right: 24px;
         z-index: 2147483647;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         backdrop-filter: blur(8px);
         white-space: nowrap;
+        transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        opacity: 1;
+        visibility: visible;
+      }
+      .float-button.hidden {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+        transform: scale(0.9);
       }
       .indicator-dot {
         width: 8px;
@@ -2546,6 +2586,15 @@
         position: fixed;
         right: 16px;
         z-index: 2147483647;
+        transform: translateY(105%);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.4s ease;
+        pointer-events: none;
+        visibility: hidden;
+      }
+      .devtools.expanded {
+        transform: translateY(0);
+        pointer-events: auto;
+        visibility: visible;
       }
       .topbar {
         align-items: center;
@@ -3417,17 +3466,53 @@
         justify-content: flex-end;
       }
       .primary-btn {
-        background: #2563eb;
+        background: #1e293b;
         color: #fff;
-        border: none;
-        padding: 6px 12px;
-        border-radius: 4px;
+        border: 1px solid #334155;
+        padding: 6px 14px;
+        border-radius: 6px;
         font-size: 11px;
         font-weight: 600;
         cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .primary-btn:hover {
-        background: #1d4ed8;
+        background: #334155;
+        border-color: #475569;
+        color: #fff;
+      }
+      .dashed-btn {
+        width: 100%;
+        padding: 6px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 6px;
+        background: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        color: #475569;
+        transition: all 0.2s ease;
+      }
+      .dashed-btn:hover {
+        background: #f8fafc;
+        border-color: #94a3b8;
+        color: #1e293b;
+      }
+      .danger-text-btn {
+        background: transparent;
+        border: none;
+        color: #ef4444;
+        cursor: pointer;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 2px 6px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+      }
+      .danger-text-btn:hover {
+        background: #fef2f2;
+        color: #dc2626;
       }
       .settings-radio-label {
         display: inline-flex !important;
@@ -3439,10 +3524,42 @@
         cursor: pointer;
       }
       .settings-radio-label input {
-        width: auto !important;
-        height: auto !important;
-        margin: 0 4px 0 0 !important;
+        appearance: none;
+        -webkit-appearance: none;
+        width: 14px !important;
+        height: 14px !important;
+        min-height: 14px !important;
+        padding: 0 !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 50% !important;
+        outline: none !important;
+        margin: 0 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
         cursor: pointer;
+        transition: all 0.2s ease;
+        background: #fff !important;
+        box-sizing: border-box !important;
+      }
+      .settings-radio-label input:checked {
+        border-color: #18a67d !important;
+        background: #18a67d !important;
+      }
+      .settings-radio-label input:checked::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #fff;
+        display: block;
+      }
+      .settings-radio-label input:hover {
+        border-color: #94a3b8 !important;
+      }
+      .settings-radio-label input:checked:hover {
+        border-color: #118160 !important;
+        background: #118160 !important;
       }
       .icon-btn.active {
         background: #e0f2fe !important;
