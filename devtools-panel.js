@@ -1106,8 +1106,7 @@
         state.contextMenu = {
           type: "request",
           requestId: state.selectedId,
-          x: event.clientX,
-          y: event.clientY
+          ...contextMenuPosition(event)
         };
         notify();
       });
@@ -1210,8 +1209,7 @@
         state.contextMenu = {
           type: "mock-group",
           groupKey: key,
-          x: event.clientX,
-          y: event.clientY
+          ...contextMenuPosition(event)
         };
         notify();
       });
@@ -1962,16 +1960,37 @@
     saveMocks();
   }
 
+  function contextMenuPosition(event) {
+    const panel = event.currentTarget?.closest(".devtools");
+    const rect = panel?.getBoundingClientRect();
+    if (!rect) {
+      return {
+        x: event.clientX,
+        y: event.clientY,
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+    }
+
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+  }
+
   function createMockFromRequest(requestId) {
     const request = state.requests.find((item) => item.id === requestId);
     if (!request) return;
     const pattern = mockPatternFromUrl(request.url);
-    const variantNumber = countMocksForEndpoint(request.method, pattern) + 1;
+    const requestMethod = String(request.method || "GET").toUpperCase();
+    const variantNumber = countMocksForEndpoint(requestMethod, pattern) + 1;
     const mock = normalizeMock(
       {
-        name: `${request.method} ${pattern} #${variantNumber}`,
+        name: `${requestMethod} ${pattern} #${variantNumber}`,
         enabled: true,
-        method: request.method,
+        method: requestMethod,
         pattern,
         status: Number(request.status) || 200,
         delay: 0,
@@ -2484,10 +2503,15 @@
   }
 
   function contextMenuTemplate(menu) {
+    const menuWidth = 216;
+    const menuHeight = menu.type === "mock-group" ? 80 : 150;
+    const boundsWidth = menu.width || window.innerWidth;
+    const boundsHeight = menu.height || window.innerHeight;
+
     if (menu.type === "mock-group") {
       const group = getMockGroups().find((g) => g.key === menu.groupKey);
-      const top = Math.max(54, Math.min(menu.y, window.innerHeight - 80));
-      const left = Math.max(12, Math.min(menu.x, window.innerWidth - 228));
+      const top = Math.max(8, Math.min(menu.y, boundsHeight - menuHeight));
+      const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
       return `
         <div class="menu-backdrop" data-close-menu></div>
         <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
@@ -2506,9 +2530,10 @@
     const request = state.requests.find((item) => item.id === menu.requestId);
     const disabled = !request || request.status === "pending";
     const pattern = request ? mockPatternFromUrl(request.url) : "";
-    const existingCount = request ? countMocksForEndpoint(request.method, pattern) : 0;
-    const top = Math.max(54, Math.min(menu.y, window.innerHeight - 150));
-    const left = Math.max(12, Math.min(menu.x, window.innerWidth - 228));
+    const requestMethod = request ? String(request.method || "GET").toUpperCase() : "GET";
+    const existingCount = request ? countMocksForEndpoint(requestMethod, pattern) : 0;
+    const top = Math.max(8, Math.min(menu.y, boundsHeight - menuHeight));
+    const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
 
     let buttonsHtml = "";
     if (request && request.mocked) {
@@ -2527,7 +2552,7 @@
           role="menuitem"
         >
           <span class="menu-title">Add another mock config</span>
-          <span class="menu-subtitle">${escapeHtml(`${pattern}, ${existingCount} existing`)}</span>
+          <span class="menu-subtitle">${escapeHtml(`${requestMethod} ${pattern}, ${existingCount} existing`)}</span>
         </button>
       `;
     } else {
@@ -2539,7 +2564,7 @@
           role="menuitem"
         >
           <span class="menu-title">Add mock config</span>
-          <span class="menu-subtitle">${request ? escapeHtml(`${pattern}${existingCount ? `, ${existingCount} existing` : ""}`) : "Request unavailable"}</span>
+          <span class="menu-subtitle">${request ? escapeHtml(`${requestMethod} ${pattern}${existingCount ? `, ${existingCount} existing` : ""}`) : "Request unavailable"}</span>
         </button>
       `;
     }
@@ -3671,7 +3696,7 @@
       .menu-backdrop {
         bottom: 0;
         left: 0;
-        position: fixed;
+        position: absolute;
         right: 0;
         top: 0;
         z-index: 1;
@@ -3684,7 +3709,7 @@
         min-width: 216px;
         overflow: hidden;
         padding: 4px;
-        position: fixed;
+        position: absolute;
         z-index: 2;
       }
       .context-menu button {
