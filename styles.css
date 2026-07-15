@@ -255,6 +255,14 @@ pre::-webkit-scrollbar-corner {
 
 .log-item strong {
   display: block;
+  margin-bottom: 4px;
+}
+
+.log-subtitle {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
   margin-bottom: 8px;
 }
 
