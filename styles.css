@@ -206,8 +206,10 @@ pre::-webkit-scrollbar-corner {
 }
 
 .app-log {
+  align-content: start;
   display: grid;
   gap: 12px;
+  grid-auto-rows: max-content;
   overflow-y: auto;
   flex: 1;
   padding-right: 4px;
