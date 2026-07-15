@@ -1190,7 +1190,11 @@
       item.addEventListener("click", () => {
         const mockId = item.getAttribute("data-view-mock");
         if (mockId) {
+          state.activeRightTab = "mocks";
           state.selectedMockId = mockId;
+          if (state.detailsLayout === "modal") {
+            state.editingMockId = mockId;
+          }
           state.contextMenu = null;
           notify();
         }
@@ -2733,6 +2737,7 @@
     }
 
     const request = state.requests.find((item) => item.id === menu.requestId);
+    const source = currentRequestSource(request);
     const disabled = !request || request.status === "pending";
     const pattern = request ? mockPatternFromUrl(request.url) : "";
     const requestMethod = request ? String(request.method || "GET").toUpperCase() : "GET";
@@ -2741,11 +2746,11 @@
     const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
 
     let buttonsHtml = "";
-    if (request && request.mocked) {
+    if (request && source.mocked && !source.snapshotted) {
       buttonsHtml = `
         <button
           type="button"
-          data-view-mock="${escapeAttr(request.mockId || "")}"
+          data-view-mock="${escapeAttr(source.mockId || "")}"
           role="menuitem"
         >
           <span class="menu-title">View mock config</span>
@@ -2783,6 +2788,7 @@
   }
 
   function detailTemplate(request) {
+    const source = requestDetailSource(request);
     return `
       <div class="detail-title">
         <span>${escapeHtml(request.method)}</span>
@@ -2791,9 +2797,9 @@
       <div class="meta">
         <span>Status: <strong class="${statusClass(request.status)}" style="font-weight: 700;">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
-        ${(request.mocked || request.snapshotted) && request.mockId
-          ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(request.mockId)}" data-source-type="${request.snapshotted ? "snapshot" : "mock"}" title="View ${request.snapshotted ? "snapshot config" : "mock rule"}">${request.snapshotted ? "Snapshotted" : "Mocked"} ↗</button>`
-          : `<span>${request.snapshotted ? "Snapshotted" : request.mocked ? "Mocked" : "Passthrough"}</span>`
+        ${source.linkable && source.mockId
+          ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(source.mockId)}" data-source-type="${source.snapshotted ? "snapshot" : "mock"}" title="View ${source.snapshotted ? "snapshot config" : "mock rule"}">${source.snapshotted ? "Snapshotted" : "Mocked"} ↗</button>`
+          : `<span>${source.snapshotted ? "Snapshotted" : source.mocked ? "Mocked" : "Passthrough"}</span>`
         }
         <span>${Math.round(request.duration)}ms</span>
       </div>
@@ -4425,6 +4431,59 @@
     return state.mocks.filter((mock) => {
       return mock.method === normalizedMethod && mock.pattern === pattern;
     }).length;
+  }
+
+  function currentRequestSource(request) {
+    if (!request) return { mocked: false, snapshotted: false, mockId: "" };
+    const mockId = request.mockId || "";
+
+    if (request.snapshotted && mockId) {
+      const hasSnapshotRule = state.snapshots.some((snapshot) =>
+        Array.isArray(snapshot.rules) && snapshot.rules.some((rule) => rule.id === mockId)
+      );
+      if (hasSnapshotRule) {
+        return { mocked: true, snapshotted: true, mockId };
+      }
+    }
+
+    if (request.mocked && mockId && state.mocks.some((mock) => mock.id === mockId)) {
+      return { mocked: true, snapshotted: false, mockId };
+    }
+
+    const pattern = mockPatternFromUrl(request.url);
+    const method = String(request.method || "GET").toUpperCase();
+    const currentMock = getMockGroups().find((group) => group.key === endpointKey(method, pattern))?.activeMock;
+    if (currentMock) {
+      return { mocked: true, snapshotted: false, mockId: currentMock.id };
+    }
+
+    return { mocked: false, snapshotted: false, mockId: "" };
+  }
+
+  function requestDetailSource(request) {
+    if (!request) {
+      return { mocked: false, snapshotted: false, mockId: "", linkable: false };
+    }
+
+    const mockId = request.mockId || "";
+    const snapshotted = Boolean(request.snapshotted);
+    const mocked = Boolean(request.mocked || snapshotted);
+    let linkable = false;
+
+    if (snapshotted && mockId) {
+      linkable = state.snapshots.some((snapshot) =>
+        Array.isArray(snapshot.rules) && snapshot.rules.some((rule) => rule.id === mockId)
+      );
+    } else if (request.mocked && mockId) {
+      linkable = state.mocks.some((mock) => mock.id === mockId);
+    }
+
+    return {
+      mocked,
+      snapshotted,
+      mockId: linkable ? mockId : "",
+      linkable
+    };
   }
 
   function endpointKey(method, pattern) {
