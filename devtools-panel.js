@@ -1165,6 +1165,10 @@
       state.selectedSnapshotIds = allSelected ? new Set() : new Set(visibleIds);
       notify();
     });
+    root.querySelector("[data-deselect-all-snapshots]")?.addEventListener("click", () => {
+      state.selectedSnapshotIds.clear();
+      notify();
+    });
     root.querySelector("[data-delete-selected-snapshots]")?.addEventListener("click", deleteSelectedSnapshots);
     root.querySelectorAll("[data-request-id]").forEach((item) => {
       item.addEventListener("click", () => {
@@ -2322,9 +2326,6 @@
       if (activeTab === "all") return true;
       return (g.group || "Default") === activeTab;
     });
-    const allSnapshotsSelected =
-      state.snapshots.length > 0 && state.snapshots.every((snapshot) => state.selectedSnapshotIds.has(snapshot.id));
-
     const tabsList = onlyDefaultGroups ? ["all"] : ["all", ...uniqueGroups];
     const groupTabsHtml = `
       <div class="mock-group-tabs">
@@ -2461,19 +2462,27 @@
             ` : `
               <!-- Snapshots Mode UI -->
               <div class="tab-content snapshots-content">
-                <div class="mock-head">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <strong>Snapshots</strong>
-                    <label class="toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
-                      <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
-                      <span class="switch" aria-hidden="true"></span>
-                    </label>
-                  </div>
+                <div class="mock-head${state.snapshotListSelectionMode ? " selection-mode" : ""}">
+                  ${state.snapshotListSelectionMode ? "" : `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <strong>Snapshots</strong>
+                      <label class="toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
+                        <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
+                        <span class="switch" aria-hidden="true"></span>
+                      </label>
+                    </div>
+                  `}
                   <div class="mock-head-actions">
                     ${state.snapshotListSelectionMode ? `
-                      <button type="button" class="selection-cancel-btn" data-cancel-snapshot-selection title="Cancel selection">Cancel</button>
-                      <button type="button" class="select-all-btn" data-toggle-all-snapshots title="${allSnapshotsSelected ? "Unselect all snapshots" : "Select all snapshots"}" ${state.snapshots.length ? "" : "disabled"}>${allSnapshotsSelected ? "Unselect All" : "Select All"}</button>
-                      <button type="button" data-delete-selected-snapshots class="danger bulk-delete-btn" title="Delete selected snapshots" ${state.selectedSnapshotIds.size ? "" : "disabled"}>Delete ${state.selectedSnapshotIds.size || ""}</button>
+                      <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotIds.size}</span>
+                      <div style="display: flex; gap: 4px;">
+                        <button type="button" class="mini-btn" data-toggle-all-snapshots style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.snapshots.length ? "" : "disabled"}>All</button>
+                        <button type="button" class="mini-btn" data-deselect-all-snapshots style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.selectedSnapshotIds.size ? "" : "disabled"}>None</button>
+                      </div>
+                      <div style="display: flex; gap: 6px; margin-left: auto;">
+                        <button type="button" data-delete-selected-snapshots style="background: #dc2626; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" title="Delete selected snapshots" ${state.selectedSnapshotIds.size ? "" : "disabled"}>Delete ${state.selectedSnapshotIds.size || ""}</button>
+                        <button type="button" data-cancel-snapshot-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
+                      </div>
                     ` : `
                       <button type="button" class="action-select-btn" data-start-snapshot-selection title="Select snapshots" ${state.snapshots.length ? "" : "disabled"}>Select</button>
                       <button type="button" class="action-import-btn" data-import-snapshots title="Import snapshot backup">Import</button>
