@@ -28,7 +28,7 @@
     collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers"]),
     floatButtonTucked: false,
     requestSearchStatus: "",
-    mockEnabled: window.localStorage.getItem("embedded-devtools-mock-enabled") !== "false",
+    mockEnabled: safeLocalStorageGet("embedded-devtools-mock-enabled") !== "false",
     selectedMockGroupTab: "all",
     lastGroupKey: null,
     activeRightTab: "mocks",
@@ -46,7 +46,7 @@
     originalFetch: null,
     OriginalXHR: null,
     showSettingsModal: false,
-    detailsLayout: window.localStorage.getItem("embedded-devtools-details-layout") || "sidebar",
+    detailsLayout: safeLocalStorageGet("embedded-devtools-details-layout") || "sidebar",
     storageUsage: null,
     editingSnapshotId: null,
     editingSnapshotDraft: null,
@@ -56,19 +56,26 @@
 
   function init(options = {}) {
     if (state.installed) return api;
-    state.installed = true;
-    state.originalFetch = window.fetch ? window.fetch.bind(window) : null;
-    state.OriginalXHR = window.XMLHttpRequest;
-    state.useServiceWorker = options.useServiceWorker !== false && canUseServiceWorker();
-    state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(options.seedMocks || []));
-    state.selectedMockId = null;
-    state.buttonPosition = options.buttonPosition || options.floatButtonPosition || null;
-    installFetchInterceptor();
-    installXhrInterceptor();
-    mountPanel();
-    hydrateMocks(options.seedMocks || []);
-    updateStorageEstimate();
-    setupServiceWorker();
+    const initOptions = options && typeof options === "object" ? options : {};
+    try {
+      state.originalFetch = window.fetch ? window.fetch.bind(window) : null;
+      state.OriginalXHR = window.XMLHttpRequest;
+      state.useServiceWorker = initOptions.useServiceWorker !== false && canUseServiceWorker();
+      state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(initOptions.seedMocks || []));
+      state.selectedMockId = null;
+      state.buttonPosition = initOptions.buttonPosition || initOptions.floatButtonPosition || null;
+      mountPanel();
+      installFetchInterceptor();
+      installXhrInterceptor();
+      state.installed = true;
+      hydrateMocks(initOptions.seedMocks || []);
+      updateStorageEstimate();
+      setupServiceWorker();
+    } catch (error) {
+      state.installed = false;
+      state.persistenceError = error.message || "MockTools initialization failed";
+      throw error;
+    }
     return api;
   }
 
@@ -118,13 +125,15 @@
   }
 
   function normalizeMocks(mocks) {
-    return mocks.map((mock, index) => normalizeMock(mock, index));
+    return Array.isArray(mocks) ? mocks.map((mock, index) => normalizeMock(mock, index)) : [];
   }
 
   function normalizeMock(mock, index) {
+    mock = mock && typeof mock === "object" ? mock : {};
     return {
       id: mock.id || `mock-${Date.now()}-${index}`,
       name: mock.name || "",
+      aliasName: mock.aliasName || "",
       enabled: mock.enabled !== false,
       method: (mock.method || "GET").toUpperCase(),
       pattern: mock.pattern || mock.url || "",
@@ -206,7 +215,7 @@
       const legacyMocks = readLegacyLocalStorageMocks();
       if (legacyMocks.length) {
         await writeToIndexedDb(MOCKS_RECORD_KEY, legacyMocks);
-        localStorage.removeItem(STORAGE_KEY);
+        safeLocalStorageRemove(STORAGE_KEY);
         return legacyMocks;
       }
     } catch (error) {
@@ -224,7 +233,7 @@
     } catch (error) {
       state.persistenceError = error.message || "IndexedDB unavailable";
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(mocks));
+        safeLocalStorageSet(STORAGE_KEY, JSON.stringify(mocks));
       } catch (_fallbackError) {
         // If both persistent stores fail, keep the in-memory state alive for this session.
       }
@@ -239,7 +248,7 @@
       state.persistenceError = error.message || "IndexedDB unavailable";
     }
     try {
-      const saved = safeJsonParse(localStorage.getItem("embedded-devtools-snapshots"), null);
+      const saved = safeJsonParse(safeLocalStorageGet("embedded-devtools-snapshots"), null);
       return Array.isArray(saved) ? saved : [];
     } catch (_error) {
       return [];
@@ -252,7 +261,7 @@
     } catch (error) {
       state.persistenceError = error.message || "IndexedDB unavailable";
       try {
-        localStorage.setItem("embedded-devtools-snapshots", JSON.stringify(snapshots));
+        safeLocalStorageSet("embedded-devtools-snapshots", JSON.stringify(snapshots));
       } catch (_fallbackError) {}
     }
   }
@@ -265,7 +274,7 @@
       state.persistenceError = error.message || "IndexedDB unavailable";
     }
     try {
-      return localStorage.getItem("embedded-devtools-active-snapshot-id") || null;
+      return safeLocalStorageGet("embedded-devtools-active-snapshot-id") || null;
     } catch (_error) {
       return null;
     }
@@ -278,17 +287,37 @@
       state.persistenceError = error.message || "IndexedDB unavailable";
       try {
         if (id) {
-          localStorage.setItem("embedded-devtools-active-snapshot-id", id);
+          safeLocalStorageSet("embedded-devtools-active-snapshot-id", id);
         } else {
-          localStorage.removeItem("embedded-devtools-active-snapshot-id");
+          safeLocalStorageRemove("embedded-devtools-active-snapshot-id");
         }
       } catch (_fallbackError) {}
     }
   }
 
+  function safeLocalStorageGet(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function safeLocalStorageSet(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (_error) {}
+  }
+
+  function safeLocalStorageRemove(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch (_error) {}
+  }
+
   function readLegacyLocalStorageMocks() {
     try {
-      const saved = safeJsonParse(localStorage.getItem(STORAGE_KEY), null);
+      const saved = safeJsonParse(safeLocalStorageGet(STORAGE_KEY), null);
       return Array.isArray(saved) ? normalizeMocks(saved) : [];
     } catch (_error) {
       return [];
@@ -1487,7 +1516,7 @@
     if (globalToggle) {
       globalToggle.addEventListener("change", (event) => {
         state.mockEnabled = event.target.checked;
-        window.localStorage.setItem("embedded-devtools-mock-enabled", String(state.mockEnabled));
+        safeLocalStorageSet("embedded-devtools-mock-enabled", String(state.mockEnabled));
         saveMocks();
       });
     }
@@ -1537,6 +1566,29 @@
         });
         saveMocks();
         notify();
+      });
+    });
+
+    root.querySelectorAll('[data-group-field="aliasName"]').forEach((input) => {
+      const updateAliasName = (value) => {
+        const method = input.getAttribute("data-group-method");
+        const pattern = input.getAttribute("data-group-pattern");
+        state.mocks = state.mocks.map((mock) => {
+          if (mock.method === method && mock.pattern === pattern) {
+            return { ...mock, aliasName: value };
+          }
+          return mock;
+        });
+      };
+
+      input.addEventListener("input", (e) => {
+        updateAliasName(e.target.value);
+        saveMocks(state.mocks, { silent: true });
+      });
+
+      input.addEventListener("change", (e) => {
+        updateAliasName(e.target.value);
+        saveMocks();
       });
     });
 
@@ -1808,7 +1860,7 @@
     root.querySelectorAll('input[name="details-layout"]').forEach((radio) => {
       radio.addEventListener("change", (e) => {
         state.detailsLayout = e.target.value;
-        window.localStorage.setItem("embedded-devtools-details-layout", state.detailsLayout);
+        safeLocalStorageSet("embedded-devtools-details-layout", state.detailsLayout);
         notify();
       });
     });
@@ -2062,6 +2114,7 @@
         method: source.method,
         pattern: source.pattern,
         group: source.group,
+        aliasName: source.aliasName,
         status: 200,
         delay: 0,
         headers: { "content-type": "application/json" },
@@ -2099,12 +2152,14 @@
     if (!request) return;
     const pattern = mockPatternFromUrl(request.url);
     const requestMethod = String(request.method || "GET").toUpperCase();
+    const existingGroup = getMockGroups().find((group) => group.key === endpointKey(requestMethod, pattern));
     const mock = normalizeMock(
       {
         name: "",
         enabled: true,
         method: requestMethod,
         pattern,
+        aliasName: existingGroup?.aliasName || "",
         status: Number(request.status) || 200,
         delay: 0,
         headers: request.responseHeaders && Object.keys(request.responseHeaders).length
@@ -2179,6 +2234,8 @@
         key: groupKey,
         method: selectedGroup.method,
         pattern: selectedGroup.pattern,
+        group: selectedGroup.group || "",
+        aliasName: selectedGroup.aliasName || "",
         mocks: state.mocks.filter((mock) => mock.method === selectedGroup.method && mock.pattern === selectedGroup.pattern)
       };
 
@@ -2472,12 +2529,13 @@
     const selectionMode = state.mockGroupSelectionMode ? " selection-active" : "";
     const checked = state.selectedMockGroupKeys.has(group.key);
     const selected = checked ? " selected" : "";
+    const endpointLabel = `${group.method} ${group.pattern || "(empty pattern)"}`;
     return `
       <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-endpoint="${escapeAttr(group.key)}">
         ${state.mockGroupSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-mock-group-selection="${escapeAttr(group.key)}" ${checked ? "checked" : ""} />` : ""}
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
-          <strong>${escapeHtml(`${group.method} ${group.pattern || "(empty pattern)"}`)}</strong>
+          <strong>${escapeHtml(group.aliasName || endpointLabel)}</strong>
           <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
@@ -2764,6 +2822,9 @@
         <div style="display: flex; gap: 8px; align-items: flex-start;">
           <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
             <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order (leave empty for Default)" data-group-field="group" data-group-key="${escapeAttr(group.key)}" />
+          </label>
+          <label style="flex-grow: 1; margin-bottom: 0;">Alias Name
+            <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
           </label>
         </div>
       </div>
@@ -4382,12 +4443,14 @@
           pattern: mock.pattern,
           mocks: [],
           activeMock: null,
-          group: mock.group || ""
+          group: mock.group || "",
+          aliasName: mock.aliasName || ""
         };
         byKey.set(key, group);
         groups.push(group);
       }
       const group = byKey.get(key);
+      if (!group.aliasName && mock.aliasName) group.aliasName = mock.aliasName;
       group.mocks.push(mock);
       if (mock.enabled && !group.activeMock) group.activeMock = mock;
     });
