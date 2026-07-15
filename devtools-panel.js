@@ -1137,12 +1137,15 @@
       state.selectedMockGroupKeys.clear();
       notify();
     });
-    root.querySelector("[data-toggle-all-mock-groups]")?.addEventListener("click", () => {
+    root.querySelector("[data-select-all-mock-groups]")?.addEventListener("click", () => {
       const visibleKeys = getMockGroups()
         .filter((group) => state.selectedMockGroupTab === "all" || (group.group || "Default") === state.selectedMockGroupTab)
         .map((group) => group.key);
-      const allSelected = visibleKeys.length > 0 && visibleKeys.every((key) => state.selectedMockGroupKeys.has(key));
-      state.selectedMockGroupKeys = allSelected ? new Set() : new Set(visibleKeys);
+      state.selectedMockGroupKeys = new Set(visibleKeys);
+      notify();
+    });
+    root.querySelector("[data-deselect-all-mock-groups]")?.addEventListener("click", () => {
+      state.selectedMockGroupKeys.clear();
       notify();
     });
     root.querySelector("[data-delete-selected-mock-groups]")?.addEventListener("click", deleteSelectedMockGroups);
@@ -2319,8 +2322,6 @@
       if (activeTab === "all") return true;
       return (g.group || "Default") === activeTab;
     });
-    const allVisibleMockGroupsSelected =
-      filteredGroups.length > 0 && filteredGroups.every((group) => state.selectedMockGroupKeys.has(group.key));
     const allSnapshotsSelected =
       state.snapshots.length > 0 && state.snapshots.every((snapshot) => state.selectedSnapshotIds.has(snapshot.id));
 
@@ -2411,19 +2412,27 @@
             ${state.activeRightTab === "mocks" ? `
               <!-- Mocks Mode UI -->
               <div class="tab-content mocks-content">
-                <div class="mock-head">
-                  <div style="display: flex; align-items: center; gap: 8px;">
-                    <strong>Mock rules</strong>
-                    <label class="toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
-                      <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
-                      <span class="switch" aria-hidden="true"></span>
-                    </label>
-                  </div>
+                <div class="mock-head${state.mockGroupSelectionMode ? " selection-mode" : ""}">
+                  ${state.mockGroupSelectionMode ? "" : `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <strong>Mock rules</strong>
+                      <label class="toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
+                        <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
+                        <span class="switch" aria-hidden="true"></span>
+                      </label>
+                    </div>
+                  `}
                   <div class="mock-head-actions">
                     ${state.mockGroupSelectionMode ? `
-                      <button type="button" class="selection-cancel-btn" data-cancel-mock-selection title="Cancel selection">Cancel</button>
-                      <button type="button" class="select-all-btn" data-toggle-all-mock-groups title="${allVisibleMockGroupsSelected ? "Unselect all visible mock rules" : "Select all visible mock rules"}" ${filteredGroups.length ? "" : "disabled"}>${allVisibleMockGroupsSelected ? "Unselect All" : "Select All"}</button>
-                      <button type="button" data-delete-selected-mock-groups class="danger bulk-delete-btn" title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>Delete ${state.selectedMockGroupKeys.size || ""}</button>
+                      <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedMockGroupKeys.size}</span>
+                      <div style="display: flex; gap: 4px;">
+                        <button type="button" class="mini-btn" data-select-all-mock-groups style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${filteredGroups.length ? "" : "disabled"}>All</button>
+                        <button type="button" class="mini-btn" data-deselect-all-mock-groups style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>None</button>
+                      </div>
+                      <div style="display: flex; gap: 6px; margin-left: auto;">
+                        <button type="button" data-delete-selected-mock-groups style="background: #dc2626; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>Delete ${state.selectedMockGroupKeys.size || ""}</button>
+                        <button type="button" data-cancel-mock-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
+                      </div>
                     ` : `
                       <button type="button" class="action-select-btn" data-start-mock-selection title="Select mock rules" ${filteredGroups.length ? "" : "disabled"}>Select</button>
                       <button type="button" class="action-add-btn" data-add-mock title="Add mock rule">Add</button>
@@ -3500,8 +3509,10 @@
       .mock-head {
         align-items: center;
         border-bottom: 1px solid #d9e1ee;
+        box-sizing: border-box;
         display: flex;
         gap: 8px;
+        height: 46px;
         justify-content: space-between;
         min-height: 46px;
         padding: 8px 12px;
@@ -3509,11 +3520,20 @@
       .mock-head strong {
         flex: 0 0 auto;
       }
+      .mock-head.selection-mode {
+        background: #e0f2fe;
+        border-bottom-color: #bae6fd;
+      }
       .mock-head-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
         justify-content: flex-end;
+      }
+      .mock-head.selection-mode .mock-head-actions {
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
       }
       .mock-head-actions button {
         font-size: 12px;
@@ -3622,11 +3642,13 @@
         background: transparent;
         border: 0;
         border-bottom: 1px solid #edf1f6;
+        box-sizing: border-box;
         color: #243047;
         cursor: pointer;
         display: grid;
         gap: 8px;
         grid-template-columns: 10px minmax(0, 1fr) 42px;
+        height: 44px;
         min-height: 44px;
         padding: 7px 10px;
         text-align: left;
@@ -3646,7 +3668,9 @@
         background: #eef6ff;
       }
       .row-select-checkbox {
+        align-self: center;
         cursor: pointer;
+        justify-self: center;
         height: 13px;
         margin: 0;
         width: 13px;
