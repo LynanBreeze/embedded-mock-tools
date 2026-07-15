@@ -38,6 +38,10 @@
     playbackIndices: {},
     snapshotSelectionMode: false,
     selectedSnapshotRequestIds: new Set(),
+    mockGroupSelectionMode: false,
+    selectedMockGroupKeys: new Set(),
+    snapshotListSelectionMode: false,
+    selectedSnapshotIds: new Set(),
     subscribers: new Set(),
     originalFetch: null,
     OriginalXHR: null,
@@ -1094,6 +1098,42 @@
     root.querySelector("[data-import-mocks]")?.addEventListener("click", importMocksFromFile);
     root.querySelector("[data-export-snapshots]")?.addEventListener("click", exportSnapshots);
     root.querySelector("[data-import-snapshots]")?.addEventListener("click", importSnapshotsFromFile);
+    root.querySelector("[data-start-mock-selection]")?.addEventListener("click", () => {
+      state.mockGroupSelectionMode = true;
+      state.selectedMockGroupKeys.clear();
+      notify();
+    });
+    root.querySelector("[data-cancel-mock-selection]")?.addEventListener("click", () => {
+      state.mockGroupSelectionMode = false;
+      state.selectedMockGroupKeys.clear();
+      notify();
+    });
+    root.querySelector("[data-toggle-all-mock-groups]")?.addEventListener("click", () => {
+      const visibleKeys = getMockGroups()
+        .filter((group) => state.selectedMockGroupTab === "all" || (group.group || "Default") === state.selectedMockGroupTab)
+        .map((group) => group.key);
+      const allSelected = visibleKeys.length > 0 && visibleKeys.every((key) => state.selectedMockGroupKeys.has(key));
+      state.selectedMockGroupKeys = allSelected ? new Set() : new Set(visibleKeys);
+      notify();
+    });
+    root.querySelector("[data-delete-selected-mock-groups]")?.addEventListener("click", deleteSelectedMockGroups);
+    root.querySelector("[data-start-snapshot-selection]")?.addEventListener("click", () => {
+      state.snapshotListSelectionMode = true;
+      state.selectedSnapshotIds.clear();
+      notify();
+    });
+    root.querySelector("[data-cancel-snapshot-selection]")?.addEventListener("click", () => {
+      state.snapshotListSelectionMode = false;
+      state.selectedSnapshotIds.clear();
+      notify();
+    });
+    root.querySelector("[data-toggle-all-snapshots]")?.addEventListener("click", () => {
+      const visibleIds = state.snapshots.map((snapshot) => snapshot.id);
+      const allSelected = visibleIds.length > 0 && visibleIds.every((id) => state.selectedSnapshotIds.has(id));
+      state.selectedSnapshotIds = allSelected ? new Set() : new Set(visibleIds);
+      notify();
+    });
+    root.querySelector("[data-delete-selected-snapshots]")?.addEventListener("click", deleteSelectedSnapshots);
     root.querySelectorAll("[data-request-id]").forEach((item) => {
       item.addEventListener("click", () => {
         state.selectedId = item.getAttribute("data-request-id");
@@ -1196,6 +1236,11 @@
     root.querySelectorAll("[data-select-endpoint]").forEach((button) => {
       button.addEventListener("click", () => {
         const key = button.getAttribute("data-select-endpoint");
+        if (state.mockGroupSelectionMode) {
+          toggleSetValue(state.selectedMockGroupKeys, key);
+          notify();
+          return;
+        }
         const group = getMockGroups().find((item) => item.key === key);
         state.selectedMockId = group?.mocks[0]?.id || null;
         if (state.detailsLayout === "modal") {
@@ -1211,6 +1256,13 @@
           groupKey: key,
           ...contextMenuPosition(event)
         };
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-toggle-mock-group-selection]").forEach((input) => {
+      input.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleSetValue(state.selectedMockGroupKeys, input.getAttribute("data-toggle-mock-group-selection"));
         notify();
       });
     });
@@ -1491,17 +1543,34 @@
     root.querySelectorAll("[data-mode-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         state.activeRightTab = button.getAttribute("data-mode-tab");
+        state.mockGroupSelectionMode = false;
+        state.selectedMockGroupKeys.clear();
+        state.snapshotListSelectionMode = false;
+        state.selectedSnapshotIds.clear();
         notify();
       });
     });
 
     root.querySelectorAll("[data-select-snapshot]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.selectedSnapshotId = button.getAttribute("data-select-snapshot");
+        const snapshotId = button.getAttribute("data-select-snapshot");
+        if (state.snapshotListSelectionMode) {
+          toggleSetValue(state.selectedSnapshotIds, snapshotId);
+          notify();
+          return;
+        }
+        state.selectedSnapshotId = snapshotId;
         startEditingSnapshot(state.selectedSnapshotId);
         if (state.detailsLayout === "modal") {
           state.editingSnapshotId = state.selectedSnapshotId;
         }
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-toggle-snapshot-selection]").forEach((input) => {
+      input.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleSetValue(state.selectedSnapshotIds, input.getAttribute("data-toggle-snapshot-selection"));
         notify();
       });
     });
@@ -1843,6 +1912,52 @@
     }, 1500);
   }
 
+  function toggleSetValue(set, value) {
+    if (!value) return;
+    if (set.has(value)) {
+      set.delete(value);
+    } else {
+      set.add(value);
+    }
+  }
+
+  function deleteSelectedMockGroups() {
+    const selectedKeys = new Set(state.selectedMockGroupKeys);
+    if (!selectedKeys.size) return;
+
+    state.mocks = state.mocks.filter((mock) => !selectedKeys.has(endpointKey(mock.method, mock.pattern)));
+    state.mocks = enforceSingleActivePerEndpoint(state.mocks);
+    if (state.selectedMockId && !state.mocks.some((mock) => mock.id === state.selectedMockId)) {
+      state.selectedMockId = null;
+    }
+    state.mockGroupSelectionMode = false;
+    state.selectedMockGroupKeys.clear();
+    saveMocks();
+  }
+
+  function deleteSelectedSnapshots() {
+    const selectedIds = new Set(state.selectedSnapshotIds);
+    if (!selectedIds.size) return;
+    const label = selectedIds.size === 1 ? "snapshot" : "snapshots";
+    if (!window.confirm(`Delete ${selectedIds.size} selected ${label}?`)) return;
+
+    state.snapshots = state.snapshots.filter((snapshot) => !selectedIds.has(snapshot.id));
+    if (state.activeSnapshotId && selectedIds.has(state.activeSnapshotId)) {
+      state.activeSnapshotId = null;
+      state.playbackIndices = {};
+      persistActiveSnapshotId(null);
+      syncServiceWorkerSnapshot();
+    }
+    if (state.selectedSnapshotId && selectedIds.has(state.selectedSnapshotId)) {
+      state.selectedSnapshotId = state.snapshots[0]?.id || null;
+      startEditingSnapshot(state.selectedSnapshotId);
+    }
+    state.snapshotListSelectionMode = false;
+    state.selectedSnapshotIds.clear();
+    persistSnapshots(state.snapshots);
+    notify();
+  }
+
   function exportMocks() {
     const payload = {
       version: 1,
@@ -1939,11 +2054,10 @@
   function addConfigFromMock(sourceId) {
     const source = state.mocks.find((mock) => mock.id === sourceId) || state.mocks[0];
     if (!source) return;
-    const nextIndex = countMocksForEndpoint(source.method, source.pattern) + 1;
     const mock = normalizeMock(
       {
         id: `mock-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        name: `${source.method} ${source.pattern} #${nextIndex}`,
+        name: "",
         enabled: false,
         method: source.method,
         pattern: source.pattern,
@@ -1985,10 +2099,9 @@
     if (!request) return;
     const pattern = mockPatternFromUrl(request.url);
     const requestMethod = String(request.method || "GET").toUpperCase();
-    const variantNumber = countMocksForEndpoint(requestMethod, pattern) + 1;
     const mock = normalizeMock(
       {
-        name: `${requestMethod} ${pattern} #${variantNumber}`,
+        name: "",
         enabled: true,
         method: requestMethod,
         pattern,
@@ -2002,7 +2115,11 @@
       state.mocks.length
     );
     state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
+    state.activeRightTab = "mocks";
     state.selectedMockId = mock.id;
+    if (state.detailsLayout === "modal") {
+      state.editingMockId = mock.id;
+    }
     state.contextMenu = null;
     saveMocks();
   }
@@ -2132,13 +2249,21 @@
       return a.localeCompare(b);
     });
 
-    const activeTab = state.selectedMockGroupTab || "all";
+    const onlyDefaultGroups = uniqueGroups.length <= 1 && uniqueGroups[0] === "Default";
+    const activeTab = onlyDefaultGroups ? "all" : state.selectedMockGroupTab || "all";
+    if (onlyDefaultGroups && state.selectedMockGroupTab !== "all") {
+      state.selectedMockGroupTab = "all";
+    }
     const filteredGroups = allGroups.filter((g) => {
       if (activeTab === "all") return true;
       return (g.group || "Default") === activeTab;
     });
+    const allVisibleMockGroupsSelected =
+      filteredGroups.length > 0 && filteredGroups.every((group) => state.selectedMockGroupKeys.has(group.key));
+    const allSnapshotsSelected =
+      state.snapshots.length > 0 && state.snapshots.every((snapshot) => state.selectedSnapshotIds.has(snapshot.id));
 
-    const tabsList = ["all", ...uniqueGroups];
+    const tabsList = onlyDefaultGroups ? ["all"] : ["all", ...uniqueGroups];
     const groupTabsHtml = `
       <div class="mock-group-tabs">
         ${tabsList.map((tab) => {
@@ -2234,9 +2359,16 @@
                     </label>
                   </div>
                   <div class="mock-head-actions">
-                    <button type="button" data-add-mock title="Add mock rule">Add</button>
-                    <button type="button" data-import-mocks title="Import mock backup">Import</button>
-                    <button type="button" data-export-mocks title="Export mock backup">Export</button>
+                    ${state.mockGroupSelectionMode ? `
+                      <button type="button" class="selection-cancel-btn" data-cancel-mock-selection title="Cancel selection">Cancel</button>
+                      <button type="button" class="select-all-btn" data-toggle-all-mock-groups title="${allVisibleMockGroupsSelected ? "Unselect all visible mock rules" : "Select all visible mock rules"}" ${filteredGroups.length ? "" : "disabled"}>${allVisibleMockGroupsSelected ? "Unselect All" : "Select All"}</button>
+                      <button type="button" data-delete-selected-mock-groups class="danger bulk-delete-btn" title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>Delete ${state.selectedMockGroupKeys.size || ""}</button>
+                    ` : `
+                      <button type="button" class="action-select-btn" data-start-mock-selection title="Select mock rules" ${filteredGroups.length ? "" : "disabled"}>Select</button>
+                      <button type="button" class="action-add-btn" data-add-mock title="Add mock rule">Add</button>
+                      <button type="button" class="action-import-btn" data-import-mocks title="Import mock backup">Import</button>
+                      <button type="button" class="action-export-btn" data-export-mocks title="Export mock backup">Export</button>
+                    `}
                   </div>
                 </div>
                 ${groupTabsHtml}
@@ -2268,8 +2400,15 @@
                     </label>
                   </div>
                   <div class="mock-head-actions">
-                    <button type="button" data-import-snapshots title="Import snapshot backup">Import</button>
-                    <button type="button" data-export-snapshots title="Export snapshot backup" ${state.selectedSnapshotId ? "" : "disabled"}>Export</button>
+                    ${state.snapshotListSelectionMode ? `
+                      <button type="button" class="selection-cancel-btn" data-cancel-snapshot-selection title="Cancel selection">Cancel</button>
+                      <button type="button" class="select-all-btn" data-toggle-all-snapshots title="${allSnapshotsSelected ? "Unselect all snapshots" : "Select all snapshots"}" ${state.snapshots.length ? "" : "disabled"}>${allSnapshotsSelected ? "Unselect All" : "Select All"}</button>
+                      <button type="button" data-delete-selected-snapshots class="danger bulk-delete-btn" title="Delete selected snapshots" ${state.selectedSnapshotIds.size ? "" : "disabled"}>Delete ${state.selectedSnapshotIds.size || ""}</button>
+                    ` : `
+                      <button type="button" class="action-select-btn" data-start-snapshot-selection title="Select snapshots" ${state.snapshots.length ? "" : "disabled"}>Select</button>
+                      <button type="button" class="action-import-btn" data-import-snapshots title="Import snapshot backup">Import</button>
+                      <button type="button" class="action-export-btn" data-export-snapshots title="Export snapshot backup" ${state.selectedSnapshotId ? "" : "disabled"}>Export</button>
+                    `}
                   </div>
                 </div>
                 <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : ""}">
@@ -2330,8 +2469,12 @@
   function mockListRow(group) {
     const active = group.mocks.some((mock) => mock.id === state.selectedMockId) ? " active" : "";
     const enabled = group.activeMock ? " enabled" : "";
+    const selectionMode = state.mockGroupSelectionMode ? " selection-active" : "";
+    const checked = state.selectedMockGroupKeys.has(group.key);
+    const selected = checked ? " selected" : "";
     return `
-      <button class="mock-row${active}${enabled}" type="button" data-select-endpoint="${escapeAttr(group.key)}">
+      <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-endpoint="${escapeAttr(group.key)}">
+        ${state.mockGroupSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-mock-group-selection="${escapeAttr(group.key)}" ${checked ? "checked" : ""} />` : ""}
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
           <strong>${escapeHtml(`${group.method} ${group.pattern || "(empty pattern)"}`)}</strong>
@@ -2345,9 +2488,13 @@
   function snapshotListRow(snapshot) {
     const active = snapshot.id === state.selectedSnapshotId ? " active" : "";
     const enabled = snapshot.id === state.activeSnapshotId ? " enabled" : "";
+    const selectionMode = state.snapshotListSelectionMode ? " selection-active" : "";
+    const checked = state.selectedSnapshotIds.has(snapshot.id);
+    const selected = checked ? " selected" : "";
     const totalSteps = snapshot.rules.reduce((acc, r) => acc + (r.responses ? r.responses.length : 0), 0);
     return `
-      <button class="mock-row${active}${enabled}" type="button" data-select-snapshot="${escapeAttr(snapshot.id)}">
+      <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-snapshot="${escapeAttr(snapshot.id)}">
+        ${state.snapshotListSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-snapshot-selection="${escapeAttr(snapshot.id)}" ${checked ? "checked" : ""} />` : ""}
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
           <strong>${escapeHtml(snapshot.name)}</strong>
@@ -3306,6 +3453,87 @@
         min-height: 28px;
         padding: 0 8px;
       }
+      .mock-head-actions button:disabled {
+        cursor: not-allowed;
+        opacity: .45;
+      }
+      .mock-head-actions .action-select-btn {
+        background: #eff6ff;
+        border-color: #93c5fd;
+        color: #1d4ed8;
+        font-weight: 700;
+      }
+      .mock-head-actions .action-select-btn:hover {
+        background: #dbeafe;
+        border-color: #60a5fa;
+        color: #1e40af;
+      }
+      .mock-head-actions .action-add-btn {
+        background: #ecfdf5;
+        border-color: #86efac;
+        color: #047857;
+        font-weight: 700;
+      }
+      .mock-head-actions .action-add-btn:hover {
+        background: #d1fae5;
+        border-color: #34d399;
+        color: #065f46;
+      }
+      .mock-head-actions .action-import-btn {
+        background: #fffbeb;
+        border-color: #fcd34d;
+        color: #a16207;
+        font-weight: 700;
+      }
+      .mock-head-actions .action-import-btn:hover {
+        background: #fef3c7;
+        border-color: #f59e0b;
+        color: #854d0e;
+      }
+      .mock-head-actions .action-export-btn {
+        background: #f5f3ff;
+        border-color: #c4b5fd;
+        color: #6d28d9;
+        font-weight: 700;
+      }
+      .mock-head-actions .action-export-btn:hover {
+        background: #ede9fe;
+        border-color: #a78bfa;
+        color: #5b21b6;
+      }
+      .mock-head-actions .selection-cancel-btn {
+        background: #f8fafc;
+        border-color: #cbd5e1;
+        color: #475569;
+        font-weight: 700;
+      }
+      .mock-head-actions .selection-cancel-btn:hover {
+        background: #e2e8f0;
+        border-color: #94a3b8;
+        color: #334155;
+      }
+      .mock-head-actions .select-all-btn {
+        background: #e0f2fe;
+        border-color: #7dd3fc;
+        color: #0369a1;
+        font-weight: 700;
+      }
+      .mock-head-actions .select-all-btn:hover {
+        background: #bae6fd;
+        border-color: #38bdf8;
+        color: #075985;
+      }
+      .mock-head-actions .bulk-delete-btn {
+        background: #dc2626;
+        border-color: #dc2626;
+        color: #fff;
+        font-weight: 800;
+      }
+      .mock-head-actions .bulk-delete-btn:hover {
+        background: #b91c1c;
+        border-color: #b91c1c;
+        color: #fff;
+      }
       .mock-layout {
         display: grid;
         grid-template-rows: minmax(120px, .42fr) minmax(220px, .58fr);
@@ -3339,6 +3567,22 @@
       }
       .mock-row:hover, .mock-row.active {
         background: #eaf2ff;
+      }
+      .mock-row.selection-active {
+        grid-template-columns: 16px 10px minmax(0, 1fr) 42px;
+      }
+      .mock-row.selection-active.active:not(.selected) {
+        background: transparent;
+      }
+      .mock-row.selection-active:hover,
+      .mock-row.selected {
+        background: #eef6ff;
+      }
+      .row-select-checkbox {
+        cursor: pointer;
+        height: 13px;
+        margin: 0;
+        width: 13px;
       }
       .rule-dot {
         background: #c3ccd9;
