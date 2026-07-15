@@ -152,6 +152,23 @@ h1 {
   margin: 0 0 14px;
 }
 
+.panel-title-row {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+}
+
+.panel-title-row h2 {
+  margin: 0;
+}
+
+.panel-title-row span {
+  color: #718096;
+  font-size: 12px;
+}
+
 pre {
   background: #101827;
   border-radius: 4px;
@@ -194,6 +211,32 @@ pre::-webkit-scrollbar-corner {
   overflow-y: auto;
   flex: 1;
   padding-right: 4px;
+}
+
+.empty-log {
+  align-self: stretch;
+  display: grid;
+  min-height: 260px;
+  place-content: center;
+  text-align: center;
+}
+
+.empty-log[hidden] {
+  display: none;
+}
+
+.empty-log-image {
+  display: block;
+  height: auto;
+  margin: 0 auto 6px;
+  max-width: 300px;
+  width: 78%;
+}
+
+.empty-log p {
+  color: #718096;
+  font-size: 13px;
+  margin: 0;
 }
 
 .usage-content {

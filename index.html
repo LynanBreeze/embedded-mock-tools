@@ -29,8 +29,20 @@
 
       <section class="workspace">
         <div class="panel">
-          <h2>Application Logs</h2>
-          <div id="appLog" class="app-log"></div>
+          <div class="panel-title-row">
+            <h2>Application Logs</h2>
+            <span>Click the buttons above to test request logs</span>
+          </div>
+          <div id="appLog" class="app-log">
+            <div class="empty-log" data-empty-log>
+              <img
+                class="empty-log-image"
+                src="data:image/svg+xml,%3Csvg width='180' height='132' viewBox='0 0 180 132' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cellipse cx='90' cy='114' rx='54' ry='8' fill='%23E8EDF5'/%3E%3Cpath d='M47 29c0-7.18 5.82-13 13-13h60c7.18 0 13 5.82 13 13v55c0 7.18-5.82 13-13 13H60c-7.18 0-13-5.82-13-13V29Z' fill='%23FFFFFF' stroke='%23CBD5E1' stroke-width='3'/%3E%3Cpath d='M47 32c0-8.84 7.16-16 16-16h54c8.84 0 16 7.16 16 16v8H47v-8Z' fill='%23F1F5F9'/%3E%3Ccircle cx='63' cy='28' r='3' fill='%2394A3B8'/%3E%3Ccircle cx='75' cy='28' r='3' fill='%23CBD5E1'/%3E%3Ccircle cx='87' cy='28' r='3' fill='%23CBD5E1'/%3E%3Crect x='63' y='56' width='54' height='8' rx='4' fill='%23E2E8F0'/%3E%3Crect x='63' y='73' width='39' height='8' rx='4' fill='%23E2E8F0'/%3E%3Cpath d='M131 62c7.18 0 13 5.82 13 13s-5.82 13-13 13-13-5.82-13-13 5.82-13 13-13Z' fill='%23ECFEFF' stroke='%2306B6D4' stroke-width='3'/%3E%3Cpath d='M126 75h10' stroke='%230E7490' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M34 64c5.33-4.67 10.67-4.67 16 0s10.67 4.67 16 0' stroke='%23BAE6FD' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M117 107c3.66-3.34 7.34-3.34 11 0s7.34 3.34 11 0' stroke='%23BFDBFE' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E"
+                alt=""
+              />
+              <p>No application logs yet</p>
+            </div>
+          </div>
         </div>
         <div class="panel">
           <h2>Usage</h2>
@@ -140,11 +152,17 @@ initMockTools().then(() => {
       });
 
       const appLog = document.querySelector("#appLog");
+      const emptyLog = appLog.querySelector("[data-empty-log]");
+      const updateLogState = () => {
+        emptyLog.hidden = Boolean(appLog.querySelector(".log-item"));
+      };
+
       const writeLog = (title, value) => {
         const item = document.createElement("article");
         item.className = "log-item";
         item.innerHTML = `<strong>${title}</strong><pre>${escapeHtml(value)}</pre>`;
         appLog.prepend(item);
+        updateLogState();
       };
 
       const escapeHtml = (value) =>
@@ -187,7 +205,8 @@ initMockTools().then(() => {
       });
 
       document.querySelector("#clearLog").addEventListener("click", () => {
-        appLog.innerHTML = "";
+        appLog.querySelectorAll(".log-item").forEach((item) => item.remove());
+        updateLogState();
       });
 
       document.querySelectorAll(".code-wrapper .copy-btn").forEach((btn) => {
