@@ -1934,6 +1934,7 @@
         notify();
       });
     });
+    root.querySelector("[data-reset-settings]")?.addEventListener("click", resetToInitialState);
 
     root.querySelectorAll("[data-close-details-modal]").forEach((el) => {
       el.addEventListener("click", () => {
@@ -2304,11 +2305,62 @@
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
+            <button type="button" class="secondary-btn reset-btn" data-reset-settings style="margin-right: auto;">Reset</button>
             <button type="button" class="secondary-btn" data-close-settings-modal>Done</button>
           </div>
         </div>
       </div>
     `;
+  }
+
+  function resetToInitialState() {
+    if (!window.confirm("Reset MockTools to its initial state? This will delete all mocks, snapshots, and request history, but keep whitelist entries.")) {
+      return;
+    }
+
+    state.mocks = [];
+    state.snapshots = [];
+    state.requests = [];
+    state.selectedId = null;
+    state.selectedMockId = null;
+    state.editingMockId = null;
+    state.selectedSnapshotId = null;
+    state.activeSnapshotId = null;
+    state.editingSnapshotId = null;
+    state.editingSnapshotDraft = null;
+    state.playbackIndices = {};
+    state.mockEnabled = true;
+    state.detailsLayout = "sidebar";
+    state.activeRightTab = "mocks";
+    state.whitelistOpen = false;
+    state.whitelistSelectionMode = false;
+    state.selectedWhitelistIds.clear();
+    state.mockGroupSelectionMode = false;
+    state.selectedMockGroupKeys.clear();
+    state.snapshotListSelectionMode = false;
+    state.selectedSnapshotIds.clear();
+    state.snapshotSelectionMode = false;
+    state.selectedSnapshotRequestIds.clear();
+    state.showSettingsModal = false;
+
+    if (mocksPersistenceTimer !== null) {
+      window.clearTimeout(mocksPersistenceTimer);
+      mocksPersistenceTimer = null;
+    }
+    pendingMocksPersistence = null;
+
+    safeLocalStorageRemove(STORAGE_KEY);
+    safeLocalStorageRemove("embedded-devtools-snapshots");
+    safeLocalStorageRemove("embedded-devtools-active-snapshot-id");
+    safeLocalStorageRemove("embedded-devtools-mock-enabled");
+    safeLocalStorageRemove("embedded-devtools-details-layout");
+
+    persistMocks([]);
+    persistSnapshots([]);
+    persistActiveSnapshotId(null);
+    syncServiceWorkerMocks();
+    syncServiceWorkerSnapshot();
+    notify();
   }
 
   function detailsModalTemplate() {
@@ -4306,6 +4358,15 @@
         background: #f1f5f9;
         border-color: #cbd5e1;
         color: #1e293b;
+      }
+      .secondary-btn.reset-btn {
+        color: #dc2626;
+        border-color: #fecaca;
+      }
+      .secondary-btn.reset-btn:hover {
+        background: #fef2f2;
+        border-color: #fca5a5;
+        color: #b91c1c;
       }
       .dashed-btn {
         width: 100%;
