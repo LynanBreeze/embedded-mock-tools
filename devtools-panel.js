@@ -1189,6 +1189,9 @@
       );
       state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
       state.selectedMockId = mock.id;
+      if (state.detailsLayout === "modal") {
+        state.editingMockId = mock.id;
+      }
       saveMocks();
     });
     root.querySelector("[data-export-mocks]")?.addEventListener("click", exportMocks);
@@ -2393,6 +2396,7 @@
     });
 
     const onlyDefaultGroups = uniqueGroups.length <= 1 && uniqueGroups[0] === "Default";
+    const hasNamedGroups = uniqueGroups.some((group) => group !== "Default");
     const activeTab = onlyDefaultGroups ? "all" : state.selectedMockGroupTab || "all";
     if (onlyDefaultGroups && state.selectedMockGroupTab !== "all") {
       state.selectedMockGroupTab = "all";
@@ -2402,7 +2406,7 @@
       return (g.group || "Default") === activeTab;
     });
     const tabsList = onlyDefaultGroups ? ["all"] : ["all", ...uniqueGroups];
-    const groupTabsHtml = `
+    const groupTabsHtml = hasNamedGroups ? `
       <div class="mock-group-tabs">
         ${tabsList.map((tab) => {
           const isActive = activeTab === tab ? " active" : "";
@@ -2410,7 +2414,7 @@
           return `<button class="mock-group-tab${isActive}" type="button" data-group-tab="${escapeAttr(tab)}">${escapeHtml(tabLabel)}</button>`;
         }).join("")}
       </div>
-    `;
+    ` : "";
 
     return `
         <header class="topbar">
@@ -2920,7 +2924,7 @@
         </div>
         <div style="display: flex; gap: 8px; align-items: flex-start;">
           <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
-            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order (leave empty for Default)" data-group-field="group" data-group-key="${escapeAttr(group.key)}" />
+            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" />
           </label>
           <label style="flex-grow: 1; margin-bottom: 0;">Alias Name
             <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
