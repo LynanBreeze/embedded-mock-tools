@@ -170,6 +170,23 @@
         return item;
       };
 
+      const formatLogValue = (value) => {
+        let formatted;
+        try {
+          formatted = JSON.stringify(JSON.parse(value), null, 2);
+        } catch {
+          return escapeHtml(value);
+        }
+        return formatted.replace(/("(?:\\.|[^"\\])*")|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?/g, (token, _quoted, offset, source) => {
+          if (token.startsWith('"')) {
+            const className = /^\s*:/.test(source.slice(offset + token.length)) ? "json-key" : "json-string";
+            return `<span class="${className}">${escapeHtml(token)}</span>`;
+          }
+          const className = token === "true" || token === "false" ? "json-boolean" : token === "null" ? "json-null" : "json-number";
+          return `<span class="${className}">${token}</span>`;
+        });
+      };
+
       const updateLog = (item, value, subtitle = "") => {
         const subtitleElement = item.querySelector(".log-subtitle");
         if (subtitle) {
@@ -184,7 +201,7 @@
         } else {
           subtitleElement?.remove();
         }
-        item.querySelector("pre").textContent = value;
+        item.querySelector("pre").innerHTML = formatLogValue(value);
       };
 
       const writeLog = (title, value, subtitle = "") => {
