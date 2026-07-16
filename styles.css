@@ -205,6 +205,40 @@ pre::-webkit-scrollbar-corner {
   background: #101827;
 }
 
+/* Static Highlight.js-compatible token colors for the Usage examples. */
+.code-wrapper pre .hljs-comment {
+  color: #7f8ea3;
+  font-style: italic;
+}
+
+.code-wrapper pre .hljs-keyword,
+.code-wrapper pre .hljs-selector-tag {
+  color: #f472b6;
+}
+
+.code-wrapper pre .hljs-string,
+.code-wrapper pre .hljs-attr {
+  color: #a5d6ff;
+}
+
+.code-wrapper pre .hljs-tag,
+.code-wrapper pre .hljs-name {
+  color: #7dd3fc;
+}
+
+.code-wrapper pre .hljs-title,
+.code-wrapper pre .hljs-title.function_,
+.code-wrapper pre .hljs-title.class_ {
+  color: #facc15;
+}
+
+.code-wrapper pre .hljs-variable,
+.code-wrapper pre .hljs-variable.language_,
+.code-wrapper pre .hljs-property,
+.code-wrapper pre .hljs-params {
+  color: #c4b5fd;
+}
+
 .app-log {
   align-content: start;
   display: grid;

@@ -16,7 +16,9 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "MOCKTOOLS_UPDATE_MOCKS") {
+  if (event.data?.type === "MOCKTOOLS_CLAIM_CLIENT") {
+    self.clients.claim();
+  } else if (event.data?.type === "MOCKTOOLS_UPDATE_MOCKS") {
     mocks = Array.isArray(event.data.mocks) ? event.data.mocks : [];
     mockRulesByMethod = buildRuleIndex(mocks);
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_SNAPSHOT") {

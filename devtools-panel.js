@@ -61,6 +61,7 @@
   const patternMatcherCache = new Map();
   let pendingMocksPersistence = null;
   let mocksPersistenceTimer = null;
+  let serviceWorkerRecoveryPromise = null;
 
   function init(options = {}) {
     if (state.installed) return api;
@@ -178,8 +179,14 @@
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         state.serviceWorkerReady = true;
         syncServiceWorkerMocks();
+        syncServiceWorkerSnapshot();
         notify();
       });
+      window.addEventListener("focus", recoverServiceWorker);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") recoverServiceWorker();
+      });
+      if (!navigator.serviceWorker.controller) recoverServiceWorker();
       notify();
     } catch (error) {
       state.serviceWorkerReady = false;
@@ -187,6 +194,36 @@
       state.persistenceError = error.message || "Service Worker unavailable";
       notify();
     }
+  }
+
+  async function recoverServiceWorker() {
+    if (!state.useServiceWorker || navigator.serviceWorker?.controller) return;
+    if (serviceWorkerRecoveryPromise) return serviceWorkerRecoveryPromise;
+
+    serviceWorkerRecoveryPromise = (async () => {
+      try {
+        const registration = state.serviceWorkerRegistration ||
+          await navigator.serviceWorker.register("./mocktools-sw.js");
+        state.serviceWorkerRegistration = registration;
+        await registration.update().catch(() => {});
+        const readyRegistration = await navigator.serviceWorker.ready;
+        state.serviceWorkerRegistration = readyRegistration;
+        if (readyRegistration.active && !navigator.serviceWorker.controller) {
+          readyRegistration.active.postMessage({ type: "MOCKTOOLS_CLAIM_CLIENT" });
+        }
+        state.serviceWorkerReady = Boolean(navigator.serviceWorker.controller);
+        syncServiceWorkerMocks();
+        syncServiceWorkerSnapshot();
+      } catch (error) {
+        state.serviceWorkerReady = false;
+        state.persistenceError = error.message || "Service Worker recovery failed";
+      } finally {
+        serviceWorkerRecoveryPromise = null;
+        notify();
+      }
+    })();
+
+    return serviceWorkerRecoveryPromise;
   }
 
   function syncServiceWorkerMocks() {
@@ -411,7 +448,7 @@
         await wait(snapshotMock.delay);
         const response = new Response(snapshotMock.body, {
           status: snapshotMock.status,
-          headers: snapshotMock.headers
+          headers: mockResponseHeaders(snapshotMock)
         });
         finishRequest(request.id, {
           status: snapshotMock.status,
@@ -432,7 +469,7 @@
         await wait(mock.delay);
         const response = new Response(mock.body, {
           status: mock.status,
-          headers: mock.headers
+          headers: mockResponseHeaders(mock)
         });
         finishRequest(request.id, {
           status: mock.status,
@@ -590,7 +627,7 @@
       defineReadonly(xhr, "response", mock.body);
       defineReadonly(xhr, "responseText", mock.body);
       xhr.getAllResponseHeaders = () =>
-        Object.entries(mock.headers || {})
+        Object.entries(Object.fromEntries(mockResponseHeaders(mock).entries()))
           .map(([key, value]) => `${key}: ${value}`)
           .join("\r\n");
       finishRequest(requestId, {
@@ -606,6 +643,14 @@
       xhr.dispatchEvent(new Event("load"));
       xhr.dispatchEvent(new Event("loadend"));
     });
+  }
+
+  function mockResponseHeaders(mock) {
+    const headers = new Headers(mock.headers || {});
+    headers.set("x-mocktools-mocked", "1");
+    headers.set("x-mocktools-mock-id", mock.id || "");
+    if (mock.snapshotted) headers.set("x-mocktools-snapshotted", "1");
+    return headers;
   }
 
   function defineReadonly(target, key, value) {
@@ -684,7 +729,11 @@
   }
 
   function shouldLetServiceWorkerMock() {
-    return state.useServiceWorker && state.serviceWorkerReady;
+    return Boolean(
+      state.useServiceWorker &&
+        state.serviceWorkerReady &&
+        navigator.serviceWorker?.controller
+    );
   }
 
   function getMatcherCandidates(rules, cache, method) {
@@ -2303,6 +2352,11 @@
                 ${spaceText}
               </div>
             </div>
+
+            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
+              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.6</div>
+            </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
             <button type="button" class="secondary-btn reset-btn" data-reset-settings style="margin-right: auto;">Reset</button>
@@ -2506,7 +2560,7 @@
         <div class="grid">
           <aside class="request-list">
             ${state.snapshotSelectionMode ? `
-              <div class="request-filter selection-toolbar" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom: 1px solid #bae6fd; height: 43px; box-sizing: border-box;">
+              <div class="request-filter selection-toolbar" style="gap: 8px; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom-color: #bae6fd;">
                 <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotRequestIds.size}</span>
                 <div style="display: flex; gap: 4px;">
                   <button type="button" class="mini-btn" data-snapshot-select-all style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">All</button>
@@ -3343,8 +3397,11 @@
         overflow-y: auto;
       }
       .request-filter {
+        box-sizing: border-box;
         display: flex;
         gap: 6px;
+        height: 43px;
+        min-height: 43px;
         padding: 8px;
         border-bottom: 1px solid #d9e1ee;
         background: #f8fafc;
