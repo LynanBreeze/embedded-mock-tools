@@ -2355,7 +2355,7 @@
 
             <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.7</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.8</div>
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
@@ -2628,7 +2628,7 @@
                   </div>
                 </div>
                 ${groupTabsHtml}
-                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : ""}">
+                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : selectedGroup ? "grid-template-rows: minmax(220px, 1fr) minmax(0, max-content);" : "grid-template-rows: minmax(0, 1fr) 0;"}">
                   <div class="mock-list">
                     ${filteredGroups.length ? filteredGroups.sort((a, b) => {
                       const aActive = a.activeMock ? 1 : 0;
@@ -2638,8 +2638,8 @@
                     }).map(mockListRow).join("") : emptyState("No mock rules")}
                   </div>
                   ${state.detailsLayout === "sidebar" ? `
-                    <div class="mock-detail">
-                      ${selectedGroup ? endpointDetailTemplate(selectedGroup) : emptyState("Select a mock rule")}
+                    <div class="mock-detail${selectedGroup ? "" : " is-empty"}">
+                      ${selectedGroup ? endpointDetailTemplate(selectedGroup) : ""}
                     </div>
                   ` : ""}
                 </div>
@@ -3659,12 +3659,15 @@
         background: #fff;
         display: grid;
         grid-template-rows: auto minmax(0, 1fr);
+        height: 100%;
         min-height: 0;
+        overflow: hidden;
       }
       .tab-content {
         display: grid;
-        min-height: 0;
         height: 100%;
+        min-height: 0;
+        overflow: hidden;
       }
       .tab-content.mocks-content {
         grid-template-rows: auto auto minmax(0, 1fr);
@@ -3833,7 +3836,8 @@
       }
       .mock-layout {
         display: grid;
-        grid-template-rows: minmax(120px, .42fr) minmax(220px, .58fr);
+        height: 100%;
+        grid-template-rows: minmax(0, .42fr) minmax(0, .58fr);
         min-height: 0;
       }
       .mock-list {
@@ -3846,6 +3850,9 @@
         min-height: 0;
         overflow: auto;
         padding: 12px;
+      }
+      .mock-detail.is-empty {
+        display: none;
       }
       .mock-row {
         align-items: center;

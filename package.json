@@ -1,6 +1,6 @@
 {
   "name": "embedded-mock-tools",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "An embedded network request interception and mock panel prototype with Service Worker support.",
   "main": "devtools-panel.js",
   "files": [
