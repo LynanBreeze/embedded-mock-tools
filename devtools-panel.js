@@ -9,6 +9,7 @@
   const SNAPSHOTS_RECORD_KEY = "snapshots";
   const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
   const MAX_REQUESTS = 200;
+  const MAX_RESPONSE_BODY_BYTES = 256 * 1024;
   const state = {
     installed: false,
     expanded: false,
@@ -53,6 +54,8 @@
     buttonPosition: null,
     savedSnapshotId: null
   };
+
+  let pendingRenderFrame = null;
 
   function init(options = {}) {
     if (state.installed) return api;
@@ -4341,7 +4344,14 @@
   }
 
   function notify() {
-    state.subscribers.forEach((subscriber) => subscriber());
+    if (pendingRenderFrame !== null) return;
+    const schedule = window.requestAnimationFrame
+      ? window.requestAnimationFrame.bind(window)
+      : (callback) => window.setTimeout(callback, 0);
+    pendingRenderFrame = schedule(() => {
+      pendingRenderFrame = null;
+      state.subscribers.forEach((subscriber) => subscriber());
+    });
   }
 
   function wait(ms) {
@@ -4395,7 +4405,50 @@
   async function readResponseText(response) {
     const type = response.headers.get("content-type") || "";
     if (type.includes("application/octet-stream")) return "[binary response]";
-    return response.text();
+
+    if (!response.body?.getReader) {
+      const text = await response.text();
+      return text.length > MAX_RESPONSE_BODY_BYTES
+        ? `${text.slice(0, MAX_RESPONSE_BODY_BYTES)}\n[response body truncated]`
+        : text;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const chunks = [];
+    let totalBytes = 0;
+    let truncated = false;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          chunks.push(decoder.decode());
+          break;
+        }
+
+        const remaining = MAX_RESPONSE_BODY_BYTES - totalBytes;
+        if (remaining <= 0) {
+          truncated = true;
+          await reader.cancel();
+          break;
+        }
+        const chunk = value.byteLength <= remaining ? value : value.slice(0, remaining);
+        totalBytes += chunk.byteLength;
+        chunks.push(decoder.decode(chunk, { stream: chunk.byteLength < value.byteLength }));
+
+        if (chunk.byteLength < value.byteLength) {
+          truncated = true;
+          await reader.cancel();
+          break;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    const text = chunks.join("");
+    return truncated ? `${text}\n[response body truncated]` : text;
   }
 
   function safeJsonParse(value, fallback) {
