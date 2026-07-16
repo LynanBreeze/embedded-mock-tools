@@ -56,6 +56,11 @@
   };
 
   let pendingRenderFrame = null;
+  let mockMatcherCache = { source: null, exact: new Map(), all: [] };
+  let snapshotMatcherCache = { source: null, exact: new Map(), all: [] };
+  const patternMatcherCache = new Map();
+  let pendingMocksPersistence = null;
+  let mocksPersistenceTimer = null;
 
   function init(options = {}) {
     if (state.installed) return api;
@@ -229,7 +234,18 @@
     return [];
   }
 
-  async function persistMocks(mocks) {
+  function persistMocks(mocks) {
+    pendingMocksPersistence = mocks;
+    if (mocksPersistenceTimer !== null) return;
+    mocksPersistenceTimer = window.setTimeout(flushPersistedMocks, 300);
+  }
+
+  async function flushPersistedMocks() {
+    mocksPersistenceTimer = null;
+    const mocks = pendingMocksPersistence;
+    pendingMocksPersistence = null;
+    if (!mocks) return;
+
     try {
       await writeToIndexedDb(MOCKS_RECORD_KEY, mocks);
       state.persistenceError = "";
@@ -240,6 +256,10 @@
       } catch (_fallbackError) {
         // If both persistent stores fail, keep the in-memory state alive for this session.
       }
+    }
+
+    if (pendingMocksPersistence && mocksPersistenceTimer === null) {
+      mocksPersistenceTimer = window.setTimeout(flushPersistedMocks, 300);
     }
   }
 
@@ -382,7 +402,9 @@
     window.fetch = async function interceptedFetch(input, initOptions = {}) {
       const startedAt = performance.now();
       const request = createFetchRecord(input, initOptions);
-      const snapshotMock = findSnapshotResponse(request.method, request.url);
+      const snapshotMock = shouldLetServiceWorkerMock()
+        ? null
+        : findSnapshotResponse(request.method, request.url);
       addRequest(request);
 
       if (snapshotMock && !shouldLetServiceWorkerMock()) {
@@ -403,7 +425,9 @@
         return response;
       }
 
-      const mock = findMock(request.method, request.url);
+      const mock = shouldLetServiceWorkerMock()
+        ? null
+        : findMock(request.method, request.url);
       if (mock && !shouldLetServiceWorkerMock()) {
         await wait(mock.delay);
         const response = new Response(mock.body, {
@@ -516,7 +540,9 @@
           mocked: false,
           error: ""
         };
-        const snapshotMock = findSnapshotResponse(meta.method, meta.url);
+        const snapshotMock = shouldLetServiceWorkerMock()
+          ? null
+          : findSnapshotResponse(meta.method, meta.url);
         addRequest(record);
 
         if (snapshotMock && !shouldLetServiceWorkerMock()) {
@@ -524,7 +550,9 @@
           return undefined;
         }
 
-        const mock = findMock(meta.method, meta.url);
+        const mock = shouldLetServiceWorkerMock()
+          ? null
+          : findMock(meta.method, meta.url);
         if (mock && !shouldLetServiceWorkerMock()) {
           respondWithMockXhr(xhr, record.id, mock, meta.startTime);
           return undefined;
@@ -607,7 +635,8 @@
     const activeSnap = state.snapshots.find((s) => s.id === state.activeSnapshotId);
     if (!activeSnap) return null;
 
-    const rule = activeSnap.rules.find((r) => {
+    const candidates = getMatcherCandidates(activeSnap.rules, snapshotMatcherCache, method);
+    const rule = candidates.find((r) => {
       const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
       return methodMatches && patternMatches(r.pattern, url);
     });
@@ -647,7 +676,7 @@
 
   function findMock(method, url) {
     if (!state.mockEnabled) return null;
-    return state.mocks.find((mock) => {
+    return getMatcherCandidates(state.mocks, mockMatcherCache, method).find((mock) => {
       if (!mock.enabled) return false;
       const methodMatches = mock.method === "ALL" || mock.method === method.toUpperCase();
       return methodMatches && patternMatches(mock.pattern, url);
@@ -658,16 +687,52 @@
     return state.useServiceWorker && state.serviceWorkerReady;
   }
 
+  function getMatcherCandidates(rules, cache, method) {
+    if (cache.source !== rules) {
+      const exact = new Map();
+      const all = [];
+      rules.forEach((rule, index) => {
+        const entry = { rule, index };
+        const normalizedMethod = String(rule.method || "GET").toUpperCase();
+        if (normalizedMethod === "ALL") {
+          all.push(entry);
+        } else {
+          if (!exact.has(normalizedMethod)) exact.set(normalizedMethod, []);
+          exact.get(normalizedMethod).push(entry);
+        }
+      });
+      cache.source = rules;
+      cache.exact = exact;
+      cache.all = all;
+    }
+
+    const normalizedMethod = String(method || "GET").toUpperCase();
+    return (cache.exact.get(normalizedMethod) || [])
+      .concat(cache.all)
+      .sort((a, b) => a.index - b.index)
+      .map((entry) => entry.rule);
+  }
+
   function patternMatches(pattern, url) {
     if (!pattern) return false;
-    if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length > 2) {
-      try {
-        return new RegExp(pattern.slice(1, -1)).test(url);
-      } catch (_error) {
-        return url.includes(pattern);
+    let matcher = patternMatcherCache.get(pattern);
+    if (!matcher) {
+      if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length > 2) {
+        try {
+          const regex = new RegExp(pattern.slice(1, -1));
+          matcher = (url) => {
+            regex.lastIndex = 0;
+            return regex.test(url);
+          };
+        } catch (_error) {
+          matcher = (url) => url.includes(pattern);
+        }
+      } else {
+        matcher = (url) => url.includes(pattern);
       }
+      patternMatcherCache.set(pattern, matcher);
     }
-    return url.includes(pattern);
+    return matcher(url);
   }
 
   function isLeftAligned(floatBtn) {
@@ -1568,16 +1633,23 @@
     });
 
     root.querySelectorAll('[data-group-field="group"]').forEach((input) => {
-      input.addEventListener("input", (e) => {
+      const updateGroup = (value) => {
         const groupKey = input.getAttribute("data-group-key");
-        const newGroup = e.target.value;
         const [method, pattern] = groupKey.split("::");
         state.mocks = state.mocks.map((mock) => {
           if (mock.method === method && mock.pattern === pattern) {
-            return { ...mock, group: newGroup };
+            return { ...mock, group: value };
           }
           return mock;
         });
+      };
+
+      input.addEventListener("input", (e) => {
+        updateGroup(e.target.value);
+      });
+
+      input.addEventListener("change", (e) => {
+        updateGroup(e.target.value);
         saveMocks();
         notify();
       });
@@ -4660,7 +4732,7 @@
     init,
     addMock(mock) {
       const nextMock = normalizeMock(mock, state.mocks.length);
-      state.mocks.unshift(nextMock);
+      state.mocks = [nextMock, ...state.mocks];
       state.selectedMockId = nextMock.id;
       saveMocks();
     },

@@ -3,6 +3,9 @@
 let mocks = [];
 let activeSnapshotRules = null;
 let playbackIndices = {};
+let mockRulesByMethod = new Map();
+let snapshotRulesByMethod = new Map();
+let patternMatcherCache = new Map();
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -15,8 +18,10 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "MOCKTOOLS_UPDATE_MOCKS") {
     mocks = Array.isArray(event.data.mocks) ? event.data.mocks : [];
+    mockRulesByMethod = buildRuleIndex(mocks);
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_SNAPSHOT") {
     activeSnapshotRules = Array.isArray(event.data.activeSnapshotRules) ? event.data.activeSnapshotRules : null;
+    snapshotRulesByMethod = buildRuleIndex(activeSnapshotRules || []);
     playbackIndices = {};
   } else if (event.data?.type === "MOCKTOOLS_RESET_PLAYBACK") {
     playbackIndices = {};
@@ -52,7 +57,7 @@ async function mockResponse(mock) {
 
 function findSnapshotResponse(method, url) {
   if (!activeSnapshotRules || activeSnapshotRules.length === 0) return null;
-  const rule = activeSnapshotRules.find((r) => {
+  const rule = getRuleCandidates(snapshotRulesByMethod, method).find((r) => {
     const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
     return methodMatches && patternMatches(r.pattern, url);
   });
@@ -90,7 +95,7 @@ function findSnapshotResponse(method, url) {
 }
 
 function findMock(method, url) {
-  return mocks.find((mock) => {
+  return getRuleCandidates(mockRulesByMethod, method).find((mock) => {
     if (!mock.enabled) return false;
     const methodMatches = mock.method === "ALL" || mock.method === String(method || "GET").toUpperCase();
     return methodMatches && patternMatches(mock.pattern, url);
@@ -99,14 +104,54 @@ function findMock(method, url) {
 
 function patternMatches(pattern, url) {
   if (!pattern) return false;
-  if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length > 2) {
-    try {
-      return new RegExp(pattern.slice(1, -1)).test(url);
-    } catch (_error) {
-      return url.includes(pattern);
+  let matcher = patternMatcherCache.get(pattern);
+  if (!matcher) {
+    if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length > 2) {
+      try {
+        const regex = new RegExp(pattern.slice(1, -1));
+        matcher = (value) => {
+          regex.lastIndex = 0;
+          return regex.test(value);
+        };
+      } catch (_error) {
+        matcher = (value) => value.includes(pattern);
+      }
+    } else {
+      matcher = (value) => value.includes(pattern);
     }
+    patternMatcherCache.set(pattern, matcher);
   }
-  return url.includes(pattern);
+  return matcher(url);
+}
+
+function buildRuleIndex(rules) {
+  const exact = new Map();
+  const all = [];
+  const methods = new Set();
+
+  rules.forEach((rule, index) => {
+    const method = String(rule.method || "GET").toUpperCase();
+    const entry = { rule, index };
+    if (method === "ALL") {
+      all.push(entry);
+    } else {
+      methods.add(method);
+      if (!exact.has(method)) exact.set(method, []);
+      exact.get(method).push(entry);
+    }
+  });
+
+  const indexed = new Map();
+  methods.forEach((method) => {
+    indexed.set(method, exact.get(method).concat(all).sort((a, b) => a.index - b.index));
+  });
+  indexed.set("*", all);
+  return indexed;
+}
+
+function getRuleCandidates(index, method) {
+  const normalizedMethod = String(method || "GET").toUpperCase();
+  return (index.get(normalizedMethod) || index.get("*") || []).map((entry) => entry.rule);
 }
 
 function wait(ms) {
