@@ -61,6 +61,7 @@
   const patternMatcherCache = new Map();
   let pendingMocksPersistence = null;
   let mocksPersistenceTimer = null;
+  let mocksPersistenceWritePromise = null;
   let serviceWorkerRecoveryPromise = null;
 
   function init(options = {}) {
@@ -110,7 +111,7 @@
 
   async function hydrateMocks(seedMocks) {
     const persistedMocks = await readPersistedMocks();
-    const mocks = persistedMocks.length ? persistedMocks : normalizeMocks(seedMocks);
+    const mocks = persistedMocks !== null ? persistedMocks : normalizeMocks(seedMocks);
     state.mocks = enforceSingleActivePerEndpoint(mocks);
     state.selectedMockId = null;
 
@@ -256,7 +257,7 @@
   async function readPersistedMocks() {
     try {
       const record = await readFromIndexedDb(MOCKS_RECORD_KEY);
-      if (Array.isArray(record?.value)) return normalizeMocks(record.value);
+      if (record && Array.isArray(record.value)) return normalizeMocks(record.value);
       const legacyMocks = readLegacyLocalStorageMocks();
       if (legacyMocks.length) {
         await writeToIndexedDb(MOCKS_RECORD_KEY, legacyMocks);
@@ -268,7 +269,7 @@
       const legacyMocks = readLegacyLocalStorageMocks();
       if (legacyMocks.length) return legacyMocks;
     }
-    return [];
+    return null;
   }
 
   function persistMocks(mocks) {
@@ -284,7 +285,9 @@
     if (!mocks) return;
 
     try {
-      await writeToIndexedDb(MOCKS_RECORD_KEY, mocks);
+      const writePromise = writeToIndexedDb(MOCKS_RECORD_KEY, mocks);
+      mocksPersistenceWritePromise = writePromise;
+      await writePromise;
       state.persistenceError = "";
     } catch (error) {
       state.persistenceError = error.message || "IndexedDB unavailable";
@@ -293,6 +296,8 @@
       } catch (_fallbackError) {
         // If both persistent stores fail, keep the in-memory state alive for this session.
       }
+    } finally {
+      mocksPersistenceWritePromise = null;
     }
 
     if (pendingMocksPersistence && mocksPersistenceTimer === null) {
@@ -2355,7 +2360,7 @@
 
             <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.8</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.</div>
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
@@ -2367,7 +2372,7 @@
     `;
   }
 
-  function resetToInitialState() {
+  async function resetToInitialState() {
     if (!window.confirm("Reset MockTools to its initial state? This will delete all mocks, snapshots, and request history, but keep whitelist entries.")) {
       return;
     }
@@ -2409,7 +2414,18 @@
     safeLocalStorageRemove("embedded-devtools-mock-enabled");
     safeLocalStorageRemove("embedded-devtools-details-layout");
 
-    persistMocks([]);
+    // Wait for an older debounced write to finish before writing the empty
+    // sentinel. Otherwise the older request can complete after reset and
+    // restore the previous rules.
+    await mocksPersistenceWritePromise?.catch(() => {});
+    try {
+      await writeToIndexedDb(MOCKS_RECORD_KEY, []);
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+      try {
+        safeLocalStorageSet(STORAGE_KEY, JSON.stringify([]));
+      } catch (_fallbackError) {}
+    }
     persistSnapshots([]);
     persistActiveSnapshotId(null);
     syncServiceWorkerMocks();
