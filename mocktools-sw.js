@@ -6,6 +6,15 @@ let playbackIndices = {};
 let mockRulesByMethod = new Map();
 let snapshotRulesByMethod = new Map();
 let patternMatcherCache = new Map();
+let stateReadyPromise = null;
+let stateInitialized = false;
+
+const DB_NAME = "embedded-devtools";
+const DB_VERSION = 1;
+const STORE_NAME = "settings";
+const MOCKS_RECORD_KEY = "mocks";
+const SNAPSHOTS_RECORD_KEY = "snapshots";
+const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -17,29 +26,80 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data?.type === "MOCKTOOLS_CLAIM_CLIENT") {
-    self.clients.claim();
+    event.waitUntil(self.clients.claim());
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_MOCKS") {
     mocks = Array.isArray(event.data.mocks) ? event.data.mocks : [];
     mockRulesByMethod = buildRuleIndex(mocks);
+    stateInitialized = true;
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_SNAPSHOT") {
     activeSnapshotRules = Array.isArray(event.data.activeSnapshotRules) ? event.data.activeSnapshotRules : null;
     snapshotRulesByMethod = buildRuleIndex(activeSnapshotRules || []);
     playbackIndices = {};
+    stateInitialized = true;
   } else if (event.data?.type === "MOCKTOOLS_RESET_PLAYBACK") {
     playbackIndices = {};
   }
 });
 
 self.addEventListener("fetch", (event) => {
-  const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
-  if (snapshotMock) {
-    event.respondWith(mockResponse(snapshotMock));
-    return;
-  }
-  const mock = findMock(event.request.method, event.request.url);
-  if (!mock) return;
-  event.respondWith(mockResponse(mock));
+  event.respondWith((async () => {
+    await ensureState();
+    const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
+    if (snapshotMock) return mockResponse(snapshotMock);
+    const mock = findMock(event.request.method, event.request.url);
+    return mock ? mockResponse(mock) : fetch(event.request);
+  })());
 });
+
+function ensureState() {
+  if (stateInitialized) return Promise.resolve();
+  if (!stateReadyPromise) {
+    stateReadyPromise = loadStateFromIndexedDb().catch(() => {}).finally(() => {
+      stateInitialized = true;
+      stateReadyPromise = null;
+    });
+  }
+  return stateReadyPromise;
+}
+
+async function loadStateFromIndexedDb() {
+  const db = await openStateDb();
+  const values = await new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readonly");
+    const store = transaction.objectStore(STORE_NAME);
+    const requests = [
+      store.get(MOCKS_RECORD_KEY),
+      store.get(SNAPSHOTS_RECORD_KEY),
+      store.get(ACTIVE_SNAPSHOT_ID_KEY)
+    ];
+    transaction.oncomplete = () => resolve(requests.map((request) => request.result?.value));
+    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB read failed"));
+  });
+  db.close();
+
+  const [persistedMocks, snapshots, activeSnapshotId] = values;
+  mocks = Array.isArray(persistedMocks) ? persistedMocks : [];
+  mockRulesByMethod = buildRuleIndex(mocks);
+  const activeSnapshot = Array.isArray(snapshots)
+    ? snapshots.find((snapshot) => snapshot.id === activeSnapshotId)
+    : null;
+  activeSnapshotRules = Array.isArray(activeSnapshot?.rules) ? activeSnapshot.rules : null;
+  snapshotRulesByMethod = buildRuleIndex(activeSnapshotRules || []);
+  playbackIndices = {};
+}
+
+function openStateDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+        request.result.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB unavailable"));
+  });
+}
 
 async function mockResponse(mock) {
   await wait(mock.delay);
