@@ -2368,7 +2368,7 @@
 
             <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.9</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.10</div>
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">

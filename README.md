@@ -4,8 +4,6 @@
 
 A zero-dependency, embeddable network request interception and mock panel. It records `fetch` and `XMLHttpRequest` requests from the current page, displays request and response details, and supports editing mock rules and replaying multi-step responses at runtime.
 
-Current version: `1.0.9`
-
 ## Features
 
 - Intercepts `fetch` and `XMLHttpRequest`, recording up to 200 requests.
