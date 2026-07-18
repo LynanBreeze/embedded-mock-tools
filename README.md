@@ -1,39 +1,48 @@
 # Embedded DevTools Mock Panel
 
-![](https://github.com/LynanBreeze/embedded-mock-tools/blob/main/preview.jpg?raw=true)
+![Embedded DevTools Mock Panel](https://github.com/LynanBreeze/embedded-mock-tools/blob/main/preview.jpg?raw=true)
 
-An embedded network request interception and mock panel prototype, supporting:
+A zero-dependency, embeddable network request interception and mock panel. It records `fetch` and `XMLHttpRequest` requests from the current page, displays request and response details, and supports editing mock rules and replaying multi-step responses at runtime.
 
-- Interception of `fetch` and `XMLHttpRequest`.
-- A floating button to collapse/expand the debug panel.
-- A left-side request list with search filtering and newest/oldest sorting.
-- A center request detail view with collapsible code blocks.
-- A right-side mock rule editor.
-- Real-time modification of response body, status code, delay, and headers.
-- Persistent mock rule storage prioritizing IndexedDB, with `localStorage` as a fallback and migration path.
+Current version: `1.0.9`
+
+## Features
+
+- Intercepts `fetch` and `XMLHttpRequest`, recording up to 200 requests.
+- Supports URL and status-code search, plus newest/oldest sorting.
+- Displays request headers, request body, response headers, and response body; JSON is automatically formatted and highlighted.
+- Lets you edit mock enabled state, name, method, matching pattern, status, delay, headers, and body in real time.
+- Supports multiple mock configurations for the same endpoint, with only one active at a time; includes grouping, bulk deletion, and creating mocks from requests.
+- Supports substring matching, simple regular expressions, and the `ALL` method.
+- Creates Snapshot scenarios from request history, with multi-step responses and repeat-last or loop playback.
+- Supports JSON import and export for mocks and Snapshots.
+- Persists configuration in IndexedDB, falls back to `localStorage` when IndexedDB is unavailable, and migrates legacy data automatically.
+- Uses a Service Worker in secure `http(s)` contexts so mocked requests can also appear in the browser's native Network panel.
+- Automatically restores Mock/Snapshot rules after a Service Worker restart, when the page regains focus, or when it becomes visible again.
+- Settings supports Split View / Modal Dialog layouts, storage estimates, and data reset.
 
 ## Quick Start
 
-Open `index.html` directly in your browser to experience the demo.
+Open `index.html` directly to try the demo. In this mode, the tool uses in-page JavaScript interception, so requests will not appear in the browser's native Network panel.
 
-If you want the browser's native DevTools Network tab to also capture the mocked requests, you must serve the files via a local HTTP server since Service Workers do not support the `file://` protocol:
+For Service Worker and native Network panel support, serve the files through a local HTTP server:
 
 ```sh
 python3 -m http.server 5173
 ```
 
-Then visit:
+Then open <http://localhost:5173/>.
 
-```text
-http://localhost:5173/
-```
+## Integration
 
-To integrate into your own project:
+Copy `devtools-panel.js`, `mocktools-sw.js`, and `styles.css` into your project's static asset directory, then initialize the panel:
 
 ```html
-<script src="./devtools-panel.js"></script>
+<link rel="stylesheet" href="/devtools/styles.css" />
+<script src="/devtools/devtools-panel.js"></script>
 <script>
   window.MockTools.init({
+    buttonPosition: "bottom-left",
     seedMocks: [
       {
         enabled: true,
@@ -49,38 +58,107 @@ To integrate into your own project:
 </script>
 ```
 
-## URL Matching
+The panel should generally only be loaded in development. For React/Vite applications, place the files in `public/`, dynamically load `devtools-panel.js` from the entry file, and call `MockTools.init()`.
 
-The `pattern` property supports two matching behaviors:
-
-- String literal: e.g., `/api/users`, matches any request URL containing this substring.
-- Simple Regex: e.g., `/\/api\/users\/\d+/`, matches as a RegExp when wrapped with `/` at both ends.
-
-## API
+### Initialization Options
 
 ```js
-window.MockTools.addMock(mock);
-window.MockTools.clearRequests();
-window.MockTools.getRequests();
-window.MockTools.getMocks();
+window.MockTools.init({
+  // Defaults to true; enabled only in supported http(s) secure contexts
+  useServiceWorker: true,
+
+  // Floating button position: "bottom-left", "bottom-right", or a position object
+  buttonPosition: "bottom-left",
+
+  // Mock list used on first initialization
+  seedMocks: []
+});
 ```
 
-## Persistence
+Existing persisted configuration takes precedence over `seedMocks`. To use the seed configuration again, click Reset in Settings or clear the site's stored data.
 
-Mock configurations are stored in IndexedDB:
+## Mock Matching and Responses
+
+```js
+{
+  enabled: true,
+  name: "Users success",
+  method: "GET",              // GET / POST / ... / ALL
+  pattern: "/api/users",      // URL substring matching
+  status: 200,
+  delay: 200,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ users: [] }, null, 2),
+  group: "Users"
+}
+```
+
+`pattern` rules:
+
+- A normal string matches a URL substring, for example `"/api/users"`.
+- A pattern wrapped in `/` is treated as a regular expression, for example `"/\\/api\\/users\\/\\d+/"`.
+- Invalid regular expressions fall back to substring matching.
+- For the same method and pattern, the first enabled rule in list order is used.
+
+## Snapshot Playback
+
+Snapshots simulate responses that change across calls to the same endpoint, such as “pending → completed”. They can be created from completed requests in the request history or configured manually with rules and response steps.
+
+```js
+{
+  name: "Create order flow",
+  rules: [
+    {
+      method: "POST",
+      pattern: "/api/orders",
+      overflow: "repeat-last", // or "loop"
+      responses: [
+        { status: 202, delay: 100, headers: {}, body: "{\"state\":\"pending\"}" },
+        { status: 200, delay: 100, headers: {}, body: "{\"state\":\"done\"}" }
+      ]
+    }
+  ]
+}
+```
+
+When a Snapshot is enabled, it takes precedence over normal Mock rules. When disabled, normal Mocks continue to apply. Responses generated by MockTools include the following marker headers so applications and debugging code can identify them:
+
+- `x-mocktools-mocked: 1`
+- `x-mocktools-snapshotted: 1` (Snapshot response)
+- `x-mocktools-mock-id: <id>`
+
+## JavaScript API
+
+```js
+window.MockTools.addMock(mock);   // Add and persist a Mock
+window.MockTools.clearRequests();  // Clear request history in the panel
+window.MockTools.getRequests();    // Return a copy of request records
+window.MockTools.getMocks();       // Return a copy of Mock configurations
+```
+
+## Persistence and Backups
+
+By default, the tool uses IndexedDB:
 
 - Database: `embedded-devtools`
 - Object Store: `settings`
-- Record Key: `mocks`
+- Mock record: `mocks`
+- Snapshot record: `snapshots`
+- Active Snapshot: `active_snapshot_id`
 
-If IndexedDB is not supported by the browser, it falls back to `localStorage`. Existing mock configurations from older versions saved in `localStorage` will be automatically migrated to IndexedDB during initialization.
+If IndexedDB is unavailable, the tool uses `localStorage`. The Mock and Snapshot toolbars each provide Import/Export actions for backing up configuration before clearing site data or debugging across environments. Reset in Settings deletes Mocks, Snapshots, and request history while preserving whitelist entries.
 
-Note that when clearing site data, both IndexedDB and `localStorage` might be deleted. The panel provides **`Export`** and **`Import`** features to backup configurations to a JSON file and restore them later.
+## Service Worker and Limitations
 
-## Native DevTools Network Integration
+The Service Worker is enabled only on `http://` or `https://` pages where the browser allows Service Workers. It registers `mocktools-sw.js` from the same directory, intercepts matching requests, and returns Mock responses so they can be observed in the native Network panel.
 
-Under `http://localhost` or `https` environments, the panel automatically registers `mocktools-sw.js`. Any matched requests will be intercepted and resolved by the Service Worker, which enables the browser's native DevTools Network tab to show these mocked requests.
+In `file://` environments or when the Service Worker is unavailable, the tool still intercepts and records requests in the current page, but mocked requests do not enter the browser's native network stack. Cross-origin requests, CSP, browser extension policies, and another Service Worker owned by the site may also affect interception.
 
-Under a `file://` protocol environment, the tool falls back to JS-only interception: requests will still appear inside the embedded panel, but they won't appear inside the browser's native Network tab due to bypassing the browser network stack.
+## Project Files
 
-This prototype is built with zero external dependencies, making it ideal as an SDK seed. Future updates could split this into an npm package, custom React/Vue components, or add features like HAR exports, request replay, filter searches, environment variables, and shared team configurations.
+- `devtools-panel.js`: Panel UI, request interception, Mock/Snapshot management, and public API.
+- `mocktools-sw.js`: Service Worker interception and persisted rule recovery.
+- `styles.css`: Demo page styles.
+- `index.html`: Runnable demo page.
+
+The project has no third-party runtime dependencies and can be used as an SDK prototype or copied into an existing frontend project.
