@@ -169,10 +169,18 @@
     );
   }
 
+  async function registerServiceWorker() {
+    try {
+      return await navigator.serviceWorker.register("./mocktools-sw.js");
+    } catch (error) {
+      return navigator.serviceWorker.register("/mocktools-sw.js");
+    }
+  }
+
   async function setupServiceWorker() {
     if (!state.useServiceWorker) return;
     try {
-      const registration = await navigator.serviceWorker.register("./mocktools-sw.js");
+      const registration = await registerServiceWorker();
       state.serviceWorkerRegistration = registration;
       await navigator.serviceWorker.ready;
       state.serviceWorkerReady = Boolean(navigator.serviceWorker.controller);
@@ -204,7 +212,7 @@
     serviceWorkerRecoveryPromise = (async () => {
       try {
         const registration = state.serviceWorkerRegistration ||
-          await navigator.serviceWorker.register("./mocktools-sw.js");
+          await registerServiceWorker();
         state.serviceWorkerRegistration = registration;
         await registration.update().catch(() => {});
         const readyRegistration = await navigator.serviceWorker.ready;
