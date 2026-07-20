@@ -2468,9 +2468,6 @@
             <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
               ${endpointDetailTemplate(group)}
             </div>
-            <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="secondary-btn" data-close-details-modal>Close</button>
-            </div>
           </div>
         </div>
       `;
@@ -2487,9 +2484,6 @@
             </div>
             <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
               ${snapshotDetailTemplate()}
-            </div>
-            <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; flex-shrink: 0;">
-              <button type="button" class="secondary-btn" data-close-details-modal>Close</button>
             </div>
           </div>
         </div>
