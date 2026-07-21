@@ -447,6 +447,28 @@
     });
   }
 
+  async function clearIndexedDbStore() {
+    const db = await openMockDb();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const req = store.clear();
+      req.onsuccess = () => {
+        store.put({ value: [], updatedAt: new Date().toISOString() }, MOCKS_RECORD_KEY);
+        store.put({ value: [], updatedAt: new Date().toISOString() }, SNAPSHOTS_RECORD_KEY);
+        store.put({ value: null, updatedAt: new Date().toISOString() }, ACTIVE_SNAPSHOT_ID_KEY);
+      };
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => {
+        db.close();
+        reject(transaction.error || new Error("IndexedDB clear transaction failed"));
+      };
+    });
+  }
+
   function installFetchInterceptor() {
     if (!state.originalFetch) return;
     window.fetch = async function interceptedFetch(input, initOptions = {}) {
@@ -2400,9 +2422,7 @@
     state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
     state.activeRightTab = "mocks";
     state.selectedMockId = mock.id;
-    if (state.detailsLayout === "modal") {
-      state.editingMockId = mock.id;
-    }
+    state.editingMockId = mock.id;
     state.contextMenu = null;
     saveMocks();
   }
@@ -2430,7 +2450,7 @@
 
             <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.11</div>
+              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.12</div>
             </div>
           </div>
           <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
@@ -2457,12 +2477,8 @@
     state.activeSnapshotId = null;
     state.editingSnapshotId = null;
     state.editingSnapshotDraft = null;
-    state.playbackIndices = {};
     state.mockEnabled = true;
     state.activeRightTab = "mocks";
-    state.whitelistOpen = false;
-    state.whitelistSelectionMode = false;
-    state.selectedWhitelistIds.clear();
     state.mockGroupSelectionMode = false;
     state.selectedMockGroupKeys.clear();
     state.snapshotListSelectionMode = false;
@@ -2488,15 +2504,17 @@
     // restore the previous rules.
     await mocksPersistenceWritePromise?.catch(() => {});
     try {
-      await writeToIndexedDb(MOCKS_RECORD_KEY, []);
+      await clearIndexedDbStore();
     } catch (error) {
       state.persistenceError = error.message || "IndexedDB unavailable";
       try {
         safeLocalStorageSet(STORAGE_KEY, JSON.stringify([]));
+        safeLocalStorageSet("embedded-devtools-snapshots", JSON.stringify([]));
+        safeLocalStorageRemove("embedded-devtools-active-snapshot-id");
       } catch (_fallbackError) {}
     }
-    persistSnapshots([]);
-    persistActiveSnapshotId(null);
+    await persistSnapshots([]);
+    await persistActiveSnapshotId(null);
     syncServiceWorkerMocks();
     syncServiceWorkerSnapshot();
     notify();
@@ -3576,7 +3594,7 @@
         cursor: pointer;
         display: grid;
         gap: 6px;
-        grid-template-columns: 10px 42px minmax(0, 1fr) 42px 46px;
+        grid-template-columns: 10px 46px minmax(0, 1fr) 44px 50px;
         min-height: 30px;
         padding: 0 8px;
         text-align: left;
@@ -3597,18 +3615,18 @@
       }
       .method {
         color: #9b3f23;
-        font-size: 11px;
+        font-size: 12px;
         font-weight: 800;
       }
       .url {
-        font-size: 11px;
+        font-size: 12px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .status, .duration {
         color: #5e6a7b;
-        font-size: 11px;
+        font-size: 12px;
         font-variant-numeric: tabular-nums;
       }
       .status-2xx { color: #0d7c5b !important; font-weight: 700; }
@@ -4037,8 +4055,8 @@
       }
       .rule-main strong {
         color: #9b3f23;
-        font-size: 11px;
-        line-height: 1;
+        font-size: 12px;
+        line-height: 1.2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -4552,14 +4570,16 @@
         border-color: #cbd5e1;
         color: #1e293b;
       }
-      .secondary-btn.reset-btn {
-        color: #dc2626;
-        border-color: #fecaca;
+      .secondary-btn.reset-btn, .danger-btn {
+        background: #dc2626;
+        color: #ffffff;
+        border-color: #dc2626;
+        box-shadow: 0 1px 2px rgba(220, 38, 38, 0.2);
       }
-      .secondary-btn.reset-btn:hover {
-        background: #fef2f2;
-        border-color: #fca5a5;
-        color: #b91c1c;
+      .secondary-btn.reset-btn:hover, .danger-btn:hover {
+        background: #b91c1c;
+        border-color: #b91c1c;
+        color: #ffffff;
       }
       .dashed-btn {
         width: 100%;
