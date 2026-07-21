@@ -47,7 +47,6 @@
     originalFetch: null,
     OriginalXHR: null,
     showSettingsModal: false,
-    detailsLayout: safeLocalStorageGet("embedded-devtools-details-layout") || "sidebar",
     storageUsage: null,
     editingSnapshotId: null,
     editingSnapshotDraft: null,
@@ -1255,9 +1254,7 @@
       );
       state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
       state.selectedMockId = mock.id;
-      if (state.detailsLayout === "modal") {
-        state.editingMockId = mock.id;
-      }
+      state.editingMockId = mock.id;
       saveMocks();
     });
     root.querySelector("[data-export-mocks]")?.addEventListener("click", exportMocks);
@@ -1336,9 +1333,7 @@
         if (mockId) {
           state.activeRightTab = "mocks";
           state.selectedMockId = mockId;
-          if (state.detailsLayout === "modal") {
-            state.editingMockId = mockId;
-          }
+          state.editingMockId = mockId;
           state.contextMenu = null;
           notify();
         }
@@ -1358,9 +1353,7 @@
             state.activeRightTab = "snapshots";
             state.selectedSnapshotId = snapshot.id;
             startEditingSnapshot(snapshot.id);
-            if (state.detailsLayout === "modal") {
-              state.editingSnapshotId = snapshot.id;
-            }
+            state.editingSnapshotId = snapshot.id;
             notify();
           }
         } else {
@@ -1369,9 +1362,7 @@
           if (mock) {
             state.activeRightTab = "mocks";
             state.selectedMockId = sourceId;
-            if (state.detailsLayout === "modal") {
-              state.editingMockId = sourceId;
-            }
+            state.editingMockId = sourceId;
             notify();
           }
         }
@@ -1420,9 +1411,7 @@
         }
         const group = getMockGroups().find((item) => item.key === key);
         state.selectedMockId = group?.mocks[0]?.id || null;
-        if (state.detailsLayout === "modal") {
-          state.editingMockId = state.selectedMockId;
-        }
+        state.editingMockId = state.selectedMockId;
         notify();
       });
       button.addEventListener("contextmenu", (event) => {
@@ -1768,9 +1757,7 @@
         }
         state.selectedSnapshotId = snapshotId;
         startEditingSnapshot(state.selectedSnapshotId);
-        if (state.detailsLayout === "modal") {
-          state.editingSnapshotId = state.selectedSnapshotId;
-        }
+        state.editingSnapshotId = state.selectedSnapshotId;
         notify();
       });
     });
@@ -2011,13 +1998,6 @@
       });
     });
 
-    root.querySelectorAll('input[name="details-layout"]').forEach((radio) => {
-      radio.addEventListener("change", (e) => {
-        state.detailsLayout = e.target.value;
-        safeLocalStorageSet("embedded-devtools-details-layout", state.detailsLayout);
-        notify();
-      });
-    });
     root.querySelectorAll("[data-snapshot-format-field]").forEach((btn) => {
       btn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -2396,21 +2376,7 @@
             <button type="button" class="close-btn" data-close-settings-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
           </div>
           <div class="modal-body" style="padding: 16px; font-size: 12px; color: #334155;">
-            <div class="settings-group" style="margin-bottom: 16px;">
-              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 8px;">Details Panel Layout</label>
-              <div class="settings-radio-group" style="display: flex; gap: 16px; margin-top: 4px;">
-                <label class="settings-radio-label">
-                  <input type="radio" name="details-layout" value="sidebar" ${state.detailsLayout === "sidebar" ? "checked" : ""} />
-                  <span>Sidebar (Split View)</span>
-                </label>
-                <label class="settings-radio-label">
-                  <input type="radio" name="details-layout" value="modal" ${state.detailsLayout === "modal" ? "checked" : ""} />
-                  <span>Modal Dialog</span>
-                </label>
-              </div>
-            </div>
-            
-            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
+            <div class="settings-group">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">IndexedDB Storage</label>
               <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
                 ${spaceText}
@@ -2448,7 +2414,6 @@
     state.editingSnapshotDraft = null;
     state.playbackIndices = {};
     state.mockEnabled = true;
-    state.detailsLayout = "sidebar";
     state.activeRightTab = "mocks";
     state.whitelistOpen = false;
     state.whitelistSelectionMode = false;
@@ -2493,7 +2458,6 @@
   }
 
   function detailsModalTemplate() {
-    if (state.detailsLayout !== "modal") return "";
     
     // For Mock details
     if (state.activeRightTab === "mocks" && state.editingMockId) {
@@ -2697,7 +2661,7 @@
                   </div>
                 </div>
                 ${groupTabsHtml}
-                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : selectedGroup ? "grid-template-rows: minmax(220px, 1fr) minmax(0, max-content);" : "grid-template-rows: minmax(0, 1fr) 0;"}">
+                <div class="mock-layout" style="grid-template-rows: 1fr;">
                   <div class="mock-list">
                     ${filteredGroups.length ? filteredGroups.sort((a, b) => {
                       const aActive = a.activeMock ? 1 : 0;
@@ -2706,11 +2670,6 @@
                       return a.key.localeCompare(b.key);
                     }).map(mockListRow).join("") : emptyState("No mock rules")}
                   </div>
-                  ${state.detailsLayout === "sidebar" ? `
-                    <div class="mock-detail${selectedGroup ? "" : " is-empty"}">
-                      ${selectedGroup ? endpointDetailTemplate(selectedGroup) : ""}
-                    </div>
-                  ` : ""}
                 </div>
               </div>
             ` : `
@@ -2744,15 +2703,10 @@
                     `}
                   </div>
                 </div>
-                <div class="mock-layout" style="${state.detailsLayout === "modal" ? "grid-template-rows: 1fr;" : ""}">
+                <div class="mock-layout" style="grid-template-rows: 1fr;">
                   <div class="mock-list">
                     ${state.snapshots.length ? state.snapshots.map(snapshotListRow).join("") : emptyState("No snapshots")}
                   </div>
-                  ${state.detailsLayout === "sidebar" ? `
-                    <div class="mock-detail">
-                      ${state.selectedSnapshotId ? snapshotDetailTemplate() : emptyState("Select a snapshot")}
-                    </div>
-                  ` : ""}
                 </div>
               </div>
             `}
