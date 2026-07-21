@@ -333,10 +333,10 @@
       await writeToIndexedDb(SNAPSHOTS_RECORD_KEY, snapshots);
     } catch (error) {
       state.persistenceError = error.message || "IndexedDB unavailable";
-      try {
-        safeLocalStorageSet("embedded-devtools-snapshots", JSON.stringify(snapshots));
-      } catch (_fallbackError) {}
     }
+    try {
+      safeLocalStorageSet("embedded-devtools-snapshots", JSON.stringify(snapshots));
+    } catch (_fallbackError) {}
   }
 
   async function readActiveSnapshotId() {
@@ -905,7 +905,9 @@
       const focusedSelector = activeElement && (
         activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
         activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" :
-        activeElement.hasAttribute("data-group-field") ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-key="${cssEscape(activeElement.getAttribute("data-group-key"))}"]` : null
+        activeElement.hasAttribute("data-group-field") ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-key="${cssEscape(activeElement.getAttribute("data-group-key"))}"]` :
+        activeElement.hasAttribute("data-snapshot-field") ? `[data-snapshot-field="${activeElement.getAttribute("data-snapshot-field")}"][data-rule-idx="${activeElement.getAttribute("data-rule-idx") || activeElement.getAttribute("data-snapshot-rule-idx")}"][data-step-idx="${activeElement.getAttribute("data-step-idx") || activeElement.getAttribute("data-snapshot-step-idx")}"]` :
+        activeElement.hasAttribute("data-rule-field") ? `[data-rule-field="${activeElement.getAttribute("data-rule-field")}"][data-rule-idx="${activeElement.getAttribute("data-rule-idx")}"]` : null
       );
       const selectionStart = focusedSelector && activeElement.selectionStart !== undefined ? activeElement.selectionStart : null;
       const selectionEnd = focusedSelector && activeElement.selectionEnd !== undefined ? activeElement.selectionEnd : null;
@@ -917,13 +919,15 @@
       state.lastGroupKey = currentGroupKey;
 
       const scrollPositions = {};
-      root.querySelectorAll(".mock-detail, .request-items, .mock-list").forEach((el) => {
+      root.querySelectorAll(".mock-detail, .request-items, .mock-list, .modal-body").forEach((el) => {
         if (el.classList.contains("mock-detail")) {
           scrollPositions[".mock-detail"] = isNewGroup ? 0 : el.scrollTop;
         } else if (el.classList.contains("request-items")) {
           scrollPositions[".request-items"] = el.scrollTop;
         } else if (el.classList.contains("mock-list")) {
           scrollPositions[".mock-list"] = el.scrollTop;
+        } else if (el.classList.contains("modal-body")) {
+          scrollPositions[".modal-body"] = el.scrollTop;
         }
       });
 
@@ -1796,7 +1800,6 @@
     root.querySelector("[data-rename-snapshot]")?.addEventListener("change", (e) => {
       if (state.editingSnapshotDraft) {
         state.editingSnapshotDraft.name = e.target.value;
-        notify();
       }
     });
 
@@ -1829,14 +1832,15 @@
     });
 
     root.querySelectorAll("[data-rule-field]").forEach((el) => {
-      el.addEventListener("change", (e) => {
-        const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
+      const updateRuleDraft = (e) => {
+        const ruleIdx = parseInt(el.getAttribute("data-rule-idx") || el.getAttribute("data-snapshot-rule-idx"), 10);
         const field = el.getAttribute("data-rule-field");
-        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
+        if (state.editingSnapshotDraft && !isNaN(ruleIdx) && state.editingSnapshotDraft.rules[ruleIdx] && field) {
           state.editingSnapshotDraft.rules[ruleIdx][field] = e.target.value;
-          notify();
         }
-      });
+      };
+      el.addEventListener("input", updateRuleDraft);
+      el.addEventListener("change", updateRuleDraft);
     });
 
     root.querySelectorAll("[data-delete-snapshot-rule]").forEach((button) => {
@@ -1894,25 +1898,23 @@
     });
 
     root.querySelectorAll("[data-snapshot-field]").forEach((el) => {
-      el.addEventListener("change", (e) => {
-        const ruleIdx = parseInt(el.getAttribute("data-rule-idx"), 10);
-        const stepIdx = parseInt(el.getAttribute("data-step-idx"), 10);
+      const updateSnapshotField = (e) => {
+        const ruleIdx = parseInt(el.getAttribute("data-rule-idx") || el.getAttribute("data-snapshot-rule-idx"), 10);
+        const stepIdx = parseInt(el.getAttribute("data-step-idx") || el.getAttribute("data-snapshot-step-idx"), 10);
         const field = el.getAttribute("data-snapshot-field");
-        if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
+        if (state.editingSnapshotDraft && !isNaN(ruleIdx) && !isNaN(stepIdx) && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
           let val = e.target.value;
           if (field === "status" || field === "delay") {
             val = Number(val || 0);
           } else if (field === "headers") {
-            try {
-              val = JSON.parse(val);
-            } catch (_err) {
-              return;
-            }
+            const currentStep = state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx];
+            val = parseHeadersInput(val, currentStep.headers || {});
           }
           state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx][field] = val;
-          notify();
         }
-      });
+      };
+      el.addEventListener("input", updateSnapshotField);
+      el.addEventListener("change", updateSnapshotField);
     });
     root.querySelectorAll("[data-fill-snapshot-status]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -2022,11 +2024,12 @@
         const ruleIdx = parseInt(btn.getAttribute("data-rule-idx"), 10);
         const stepIdx = parseInt(btn.getAttribute("data-step-idx"), 10);
         const field = btn.getAttribute("data-snapshot-format-field");
-        const textarea = root.querySelector(`textarea[data-snapshot-rule-idx="${ruleIdx}"][data-snapshot-step-idx="${stepIdx}"][data-snapshot-field="${field}"]`);
+        const textarea = root.querySelector(`textarea[data-snapshot-rule-idx="${ruleIdx}"][data-snapshot-step-idx="${stepIdx}"][data-snapshot-field="${field}"]`) ||
+          root.querySelector(`textarea[data-rule-idx="${ruleIdx}"][data-step-idx="${stepIdx}"][data-snapshot-field="${field}"]`);
         if (!textarea) return;
 
         try {
-          const parsed = safeParseLooseJson(textarea.value);
+          const parsed = parseHeadersInput(textarea.value);
           const formatted = JSON.stringify(parsed, null, 2);
           textarea.value = formatted;
           
@@ -2055,16 +2058,25 @@
       });
     });
     root.querySelector("[data-save-snapshot-edit]")?.addEventListener("click", () => {
-      if (!state.editingSnapshotDraft) return;
-      const index = state.snapshots.findIndex((s) => s.id === state.editingSnapshotDraft.id);
-      if (index !== -1) {
-        state.snapshots[index] = state.editingSnapshotDraft;
+      try {
+        if (!state.editingSnapshotDraft) return;
+        syncSnapshotDraftFromDom(root);
+
+        const cleanDraft = JSON.parse(JSON.stringify(state.editingSnapshotDraft));
+        let index = state.snapshots.findIndex((s) => String(s.id) === String(cleanDraft.id));
+        if (index !== -1) {
+          state.snapshots[index] = cleanDraft;
+        } else {
+          state.snapshots.push(cleanDraft);
+        }
+
         persistSnapshots(state.snapshots);
-        if (state.editingSnapshotDraft.id === state.activeSnapshotId) {
+
+        if (cleanDraft.id === state.activeSnapshotId) {
           syncServiceWorkerSnapshot();
         }
-        
-        const id = state.editingSnapshotDraft.id;
+
+        const id = cleanDraft.id;
         state.savedSnapshotId = id;
         notify();
 
@@ -2073,6 +2085,8 @@
           state.savedSnapshotId = null;
           notify();
         }, 1500);
+      } catch (err) {
+        console.error("Failed to save snapshot edit:", err);
       }
     });
 
@@ -2084,7 +2098,44 @@
 
   }
 
+  function syncSnapshotDraftFromDom(root) {
+    if (!state.editingSnapshotDraft) return;
+
+    const nameInput = root.querySelector("[data-rename-snapshot]");
+    if (nameInput) {
+      state.editingSnapshotDraft.name = nameInput.value;
+    }
+
+    root.querySelectorAll("[data-rule-field]").forEach((el) => {
+      const ruleIdx = parseInt(el.getAttribute("data-rule-idx") || el.getAttribute("data-snapshot-rule-idx"), 10);
+      const field = el.getAttribute("data-rule-field");
+      if (!isNaN(ruleIdx) && state.editingSnapshotDraft.rules[ruleIdx] && field) {
+        state.editingSnapshotDraft.rules[ruleIdx][field] = el.value;
+      }
+    });
+
+    root.querySelectorAll("[data-snapshot-field]").forEach((el) => {
+      const ruleIdx = parseInt(el.getAttribute("data-rule-idx") || el.getAttribute("data-snapshot-rule-idx"), 10);
+      const stepIdx = parseInt(el.getAttribute("data-step-idx") || el.getAttribute("data-snapshot-step-idx"), 10);
+      const field = el.getAttribute("data-snapshot-field");
+      if (!isNaN(ruleIdx) && !isNaN(stepIdx) && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx] && field) {
+        let val = el.value;
+        if (field === "status" || field === "delay") {
+          val = Number(val || 0);
+        } else if (field === "headers") {
+          const currentStep = state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx];
+          val = parseHeadersInput(val, currentStep.headers || {});
+        }
+        state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx][field] = val;
+      }
+    });
+  }
+
   function saveMockFromForm(root, id) {
+    const activeEl = root.getRootNode()?.activeElement || document.activeElement;
+    if (activeEl && typeof activeEl.blur === "function") {
+      activeEl.blur();
+    }
     const card = root.querySelector(`[data-mock-card="${cssEscape(id)}"]`);
     const currentMock = state.mocks.find((mock) => mock.id === id);
     if (!card || !currentMock) return;
@@ -2844,7 +2895,7 @@
                 </div>
                 <button type="button" class="format-btn" data-snapshot-format-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
               </h3>
-              <textarea data-snapshot-field="headers" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
+              <textarea data-snapshot-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
             </div>
 
             <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${bodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
@@ -2857,7 +2908,7 @@
                 </div>
                 <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
               </h3>
-              <textarea data-snapshot-field="body" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
+              <textarea data-snapshot-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
             </div>
           </div>
         `;
@@ -4662,6 +4713,29 @@
       }, {});
   }
 
+  function parseHeadersInput(val, fallback = {}) {
+    const trimmed = String(val || "").trim();
+    if (!trimmed) return {};
+    try {
+      return JSON.parse(trimmed);
+    } catch (_e1) {
+      try {
+        const parsed = new Function(`return (${trimmed});`)();
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch (_e2) {}
+    }
+    try {
+      const parsedKeyValues = parseRawHeaders(trimmed);
+      if (Object.keys(parsedKeyValues).length > 0) {
+        return parsedKeyValues;
+      }
+    } catch (_e3) {}
+
+    return fallback;
+  }
+
   async function readResponseText(response) {
     const type = response.headers.get("content-type") || "";
     if (type.includes("application/octet-stream")) return "[binary response]";
@@ -4738,7 +4812,7 @@
   }
 
   function startEditingSnapshot(id) {
-    const original = state.snapshots.find(s => s.id === id);
+    const original = state.snapshots.find(s => String(s.id) === String(id));
     if (original) {
       state.editingSnapshotDraft = JSON.parse(JSON.stringify(original));
     } else {
