@@ -42,11 +42,12 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
+  const mock = findMock(event.request.method, event.request.url);
+  if (!snapshotMock && !mock) return;
   event.respondWith((async () => {
     await ensureState();
-    const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
     if (snapshotMock) return mockResponse(snapshotMock);
-    const mock = findMock(event.request.method, event.request.url);
     return mock ? mockResponse(mock) : fetch(event.request);
   })());
 });
