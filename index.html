@@ -248,7 +248,7 @@
       document.querySelector("#fetchUsers").addEventListener("click", async () => {
         const logItem = createLog("Fetch /api/users");
         try {
-          const response = await fetch("/api/users");
+          const response = await fetch("/test/a/b/api/users");
           updateLog(logItem, await response.text(), mockSubtitle(responseMockStatus(response)));
         } catch (error) {
           updateLog(logItem, error.message, "Request failed");

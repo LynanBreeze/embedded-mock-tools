@@ -50,6 +50,7 @@
     storageUsage: null,
     editingSnapshotId: null,
     editingSnapshotDraft: null,
+    selectedSnapshotRuleIdx: 0,
     buttonPosition: null,
     savedSnapshotId: null
   };
@@ -1347,13 +1348,17 @@
         if (sourceType === "snapshot") {
           // Navigate to the snapshot that contains this rule
           const snapshot = state.snapshots.find((s) =>
-            s.rules && s.rules.some((r) => r.id === sourceId)
+            s.rules && s.rules.some((r) => String(r.id) === String(sourceId))
           );
           if (snapshot) {
             state.activeRightTab = "snapshots";
             state.selectedSnapshotId = snapshot.id;
             startEditingSnapshot(snapshot.id);
             state.editingSnapshotId = snapshot.id;
+            const ruleIdx = snapshot.rules.findIndex((r) => String(r.id) === String(sourceId));
+            if (ruleIdx !== -1) {
+              state.selectedSnapshotRuleIdx = ruleIdx;
+            }
             notify();
           }
         } else {
@@ -1835,6 +1840,45 @@
         const ruleIdx = parseInt(button.getAttribute("data-delete-snapshot-rule"), 10);
         if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
           state.editingSnapshotDraft.rules.splice(ruleIdx, 1);
+          state.selectedSnapshotRuleIdx = Math.max(0, Math.min(state.selectedSnapshotRuleIdx, state.editingSnapshotDraft.rules.length - 1));
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-select-snapshot-rule-idx]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-select-snapshot-rule-idx"), 10);
+        if (!isNaN(ruleIdx)) {
+          state.selectedSnapshotRuleIdx = ruleIdx;
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-move-snapshot-rule-up]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-move-snapshot-rule-up"), 10);
+        if (state.editingSnapshotDraft && !isNaN(ruleIdx) && ruleIdx > 0) {
+          const rules = state.editingSnapshotDraft.rules;
+          const temp = rules[ruleIdx];
+          rules[ruleIdx] = rules[ruleIdx - 1];
+          rules[ruleIdx - 1] = temp;
+          state.selectedSnapshotRuleIdx = ruleIdx - 1;
+          notify();
+        }
+      });
+    });
+
+    root.querySelectorAll("[data-move-snapshot-rule-down]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = parseInt(button.getAttribute("data-move-snapshot-rule-down"), 10);
+        if (state.editingSnapshotDraft && !isNaN(ruleIdx) && ruleIdx < state.editingSnapshotDraft.rules.length - 1) {
+          const rules = state.editingSnapshotDraft.rules;
+          const temp = rules[ruleIdx];
+          rules[ruleIdx] = rules[ruleIdx + 1];
+          rules[ruleIdx + 1] = temp;
+          state.selectedSnapshotRuleIdx = ruleIdx + 1;
           notify();
         }
       });
@@ -1851,6 +1895,7 @@
             { status: 200, delay: 200, headers: { "content-type": "application/json" }, body: "{}" }
           ]
         });
+        state.selectedSnapshotRuleIdx = state.editingSnapshotDraft.rules.length - 1;
         notify();
       }
     });
@@ -2492,12 +2537,12 @@
     if (state.activeRightTab === "snapshots" && state.editingSnapshotId) {
       return `
         <div class="modal-overlay" data-close-details-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 780px; max-width: 90vw; max-height: 85vh; overflow: hidden;">
+          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 860px; max-width: 95vw; height: 80vh; max-height: 85vh; overflow: hidden;">
             <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
               <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Edit Snapshot Rules</h3>
               <button type="button" class="close-btn" data-close-details-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
             </div>
-            <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
+            <div class="modal-body" style="padding: 0; overflow: hidden; flex-grow: 1; min-height: 0; display: flex; flex-direction: row; height: 100%;">
               ${snapshotDetailTemplate()}
             </div>
           </div>
@@ -2746,7 +2791,7 @@
         ${checkboxHtml}
         <span class="mock-dot" title="${mockLabel}" aria-label="${mockLabel}"></span>
         <span class="method">${escapeHtml(request.method)}</span>
-        <span class="url">${escapeHtml(shortUrl(request.url))}</span>
+        <span class="url" title="${escapeAttr(request.url)}">${escapeHtml(formatPathDisplay(request.url))}</span>
         <span class="status ${statusClass(request.status)}">${escapeHtml(String(request.status))}</span>
         <span class="duration">${Math.round(request.duration)}ms</span>
       </button>
@@ -2759,7 +2804,7 @@
     const selectionMode = state.mockGroupSelectionMode ? " selection-active" : "";
     const checked = state.selectedMockGroupKeys.has(group.key);
     const selected = checked ? " selected" : "";
-    const endpointLabel = `${group.method} ${group.pattern || "(empty pattern)"}`;
+    const endpointLabel = `${group.method} ${formatPathDisplay(group.pattern) || "(empty pattern)"}`;
     return `
       <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-endpoint="${escapeAttr(group.key)}">
         ${state.mockGroupSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-mock-group-selection="${escapeAttr(group.key)}" ${checked ? "checked" : ""} />` : ""}
@@ -2800,11 +2845,37 @@
     const isActive = snapshot.id === state.activeSnapshotId;
     const isSaved = snapshot.id === state.savedSnapshotId;
 
-    const rulesHtml = snapshot.rules.map((rule, ruleIdx) => {
-      const stepsHtml = (rule.responses || []).map((resp, stepIdx) => {
+    const rules = snapshot.rules || [];
+    let activeRuleIdx = state.selectedSnapshotRuleIdx || 0;
+    if (activeRuleIdx >= rules.length) {
+      activeRuleIdx = Math.max(0, rules.length - 1);
+    }
+    state.selectedSnapshotRuleIdx = activeRuleIdx;
+    const activeRule = rules[activeRuleIdx] || null;
+
+    // Build Left Column Nav Items
+    const rulesNavHtml = rules.map((rule, ruleIdx) => {
+      const isSelected = ruleIdx === activeRuleIdx;
+      const methodClass = `method-${(rule.method || "GET").toLowerCase()}`;
+      const stepCount = rule.responses ? rule.responses.length : 0;
+      return `
+        <button type="button" class="snapshot-rule-nav-item${isSelected ? " active" : ""}" data-select-snapshot-rule-idx="${ruleIdx}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 8px; border-radius: 6px; border: 1px solid ${isSelected ? "#93c5fd" : "#e2e8f0"}; background: ${isSelected ? "#eff6ff" : "#ffffff"}; cursor: pointer; text-align: left; width: 100%; transition: all 0.15s ease;">
+          <div style="display: flex; align-items: center; gap: 6px; width: 100%;">
+            <span class="method-badge ${methodClass}" style="font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; font-family: monospace;">${escapeHtml(rule.method)}</span>
+            <span style="font-size: 11px; font-weight: 600; color: ${isSelected ? "#1e40af" : "#334155"}; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;" title="${escapeAttr(rule.pattern)}">${escapeHtml(formatPathDisplay(rule.pattern) || "Rule #" + (ruleIdx + 1))}</span>
+          </div>
+          <div style="font-size: 10px; color: #64748b; margin-left: 2px;">${stepCount} step${stepCount === 1 ? "" : "s"}</div>
+        </button>
+      `;
+    }).join("");
+
+    // Build Right Column Active Rule Content
+    let activeRuleHtml = "";
+    if (activeRule) {
+      const stepsHtml = (activeRule.responses || []).map((resp, stepIdx) => {
         const stepNum = stepIdx + 1;
-        const headerTitle = `expanded-snapshot-headers-${ruleIdx}-${stepIdx}`;
-        const bodyTitle = `collapsed-snapshot-body-${ruleIdx}-${stepIdx}`;
+        const headerTitle = `expanded-snapshot-headers-${activeRuleIdx}-${stepIdx}`;
+        const bodyTitle = `collapsed-snapshot-body-${activeRuleIdx}-${stepIdx}`;
         const isHeadersCollapsed = !state.collapsedSections.has(headerTitle);
         const isBodyCollapsed = state.collapsedSections.has(bodyTitle);
 
@@ -2812,28 +2883,28 @@
           <div class="step-card" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <span style="font-size: 11px; font-weight: 700; color: #475569;">Step ${stepNum}</span>
-              <button type="button" class="danger-text-btn" data-delete-snapshot-step="${ruleIdx}-${stepIdx}">Delete Step</button>
+              <button type="button" class="danger-text-btn" data-delete-snapshot-step="${activeRuleIdx}-${stepIdx}">Delete Step</button>
             </div>
             <div style="display: flex; gap: 6px; margin-bottom: 6px;">
               <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 10px; color: #475569; font-weight: 600;">Status</span>
                 <div style="display: flex; gap: 4px; align-items: center;">
-                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
                   <div style="display: flex; gap: 2px; flex-shrink: 0;">
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="200" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">200</button>
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="404" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">404</button>
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="500" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">500</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="200" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">200</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="404" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">404</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-status="500" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">500</button>
                   </div>
                 </div>
               </div>
               <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 10px; color: #475569; font-weight: 600;">Delay (ms)</span>
                 <div style="display: flex; gap: 4px; align-items: center;">
-                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
                   <div style="display: flex; gap: 2px; flex-shrink: 0;">
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="0" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">0</button>
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="500" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">500</button>
-                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="1000" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}">1000</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="0" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">0</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="500" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">500</button>
+                    <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="1000" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">1000</button>
                   </div>
                 </div>
               </div>
@@ -2847,9 +2918,9 @@
                   </svg>
                   <span>Headers (JSON)</span>
                 </div>
-                <button type="button" class="format-btn" data-snapshot-format-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+                <button type="button" class="format-btn" data-snapshot-format-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
               </h3>
-              <textarea data-snapshot-field="headers" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="3" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
+              <textarea data-snapshot-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="5" style="width: 100%; min-height: 80px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
             </div>
 
             <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${bodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
@@ -2860,79 +2931,114 @@
                   </svg>
                   <span>Body</span>
                 </div>
-                <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+                <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
               </h3>
-              <textarea data-snapshot-field="body" data-rule-idx="${ruleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${ruleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; font-size: 11px; padding: 2px 4px; font-family: monospace;">${escapeHtml(resp.body)}</textarea>
+              <textarea data-snapshot-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="10" style="width: 100%; min-height: 260px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.body)}</textarea>
             </div>
           </div>
         `;
       }).join("");
 
-      return `
-        <div class="snapshot-rule-card" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
-          <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-            <select data-rule-field="method" data-rule-idx="${ruleIdx}" style="width: 80px; font-weight: 700; font-size: 11px; flex-shrink: 0;">
-              ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${rule.method === m ? "selected" : ""}>${m}</option>`).join("")}
+      activeRuleHtml = `
+        <div class="snapshot-rule-card" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #f8fafc;">
+          <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+            <select data-rule-field="method" data-rule-idx="${activeRuleIdx}" style="width: 80px; font-weight: 700; font-size: 11px; flex-shrink: 0;">
+              ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${activeRule.method === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
-            <input type="text" value="${escapeAttr(rule.pattern)}" data-rule-field="pattern" data-rule-idx="${ruleIdx}" style="flex-grow: 1; font-size: 11px; padding: 2px 6px;" placeholder="URL pattern" />
-            <button type="button" class="danger-text-btn" data-delete-snapshot-rule="${ruleIdx}">Delete Rule</button>
+            <input type="text" value="${escapeAttr(activeRule.pattern)}" data-rule-field="pattern" data-rule-idx="${activeRuleIdx}" style="flex-grow: 1; font-size: 11px; padding: 4px 6px;" placeholder="URL pattern (e.g. /api/user)" />
+            <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
+              <button type="button" class="mini-btn icon-action-btn" data-move-snapshot-rule-up="${activeRuleIdx}" ${activeRuleIdx === 0 ? "disabled" : ""} title="Move Rule Up" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+              </button>
+              <button type="button" class="mini-btn icon-action-btn" data-move-snapshot-rule-down="${activeRuleIdx}" ${activeRuleIdx === rules.length - 1 ? "disabled" : ""} title="Move Rule Down" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
+                <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </div>
+            <button type="button" class="danger-text-btn" data-delete-snapshot-rule="${activeRuleIdx}" style="white-space: nowrap;">Delete Rule</button>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <span style="font-size: 10px; color: #64748b;">On overflow:</span>
-            <select data-rule-field="overflow" data-rule-idx="${ruleIdx}" style="font-size: 10px; padding: 2px;">
-              <option value="repeat-last" ${rule.overflow === "repeat-last" ? "selected" : ""}>Repeat last step</option>
-              <option value="loop" ${rule.overflow === "loop" ? "selected" : ""}>Loop back to start</option>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 10px; color: #64748b; font-weight: 600;">On overflow:</span>
+            <select data-rule-field="overflow" data-rule-idx="${activeRuleIdx}" style="font-size: 10px; padding: 2px 4px;">
+              <option value="repeat-last" ${activeRule.overflow === "repeat-last" ? "selected" : ""}>Repeat last step</option>
+              <option value="loop" ${activeRule.overflow === "loop" ? "selected" : ""}>Loop back to start</option>
             </select>
           </div>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 8px;">Response Steps (${activeRule.responses ? activeRule.responses.length : 0})</div>
           <div class="steps-container">
             ${stepsHtml}
           </div>
-          <button type="button" data-add-snapshot-step="${ruleIdx}" class="dashed-btn">+ Add Response Step</button>
+          <button type="button" data-add-snapshot-step="${activeRuleIdx}" class="dashed-btn" style="margin-top: 8px; font-size: 11px; width: 100%;">+ Add Response Step</button>
         </div>
       `;
-    }).join("");
+    } else {
+      activeRuleHtml = `
+        <div style="padding: 40px 16px; text-align: center; color: #64748b; font-size: 12px;">
+          No rules defined in this snapshot.<br/>
+          <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 12px; width: auto; display: inline-block; padding: 6px 16px;">+ Add Intercept Rule</button>
+        </div>
+      `;
+    }
 
     return `
-      <div style="padding: 12px;">
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;">
-          <div style="display: flex; align-items: flex-end; gap: 12px; width: 100%;">
-            <label style="font-size: 11px; font-weight: 700; flex-grow: 1; display: flex; flex-direction: column; gap: 4px; margin-bottom: 0;">
+      <div class="snapshot-editor-split" style="display: flex; width: 100%; height: 100%; overflow: hidden;">
+        <!-- Left Column: API / Rule List -->
+        <div class="snapshot-editor-left" style="width: 240px; min-width: 200px; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; padding: 12px; box-sizing: border-box;">
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e1;">
+            <label style="font-size: 11px; font-weight: 700; color: #475569; display: flex; flex-direction: column; gap: 4px;">
               Snapshot Name
-              <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 13px; padding: 4px 8px; height: 30px; box-sizing: border-box;" />
+              <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 12px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;" />
             </label>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
-              <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Active</span>
-              <label class="toggle" style="display: inline-flex; height: 30px; align-items: center;" title="Activate/Deactivate Snapshot">
-                <input type="checkbox" data-toggle-active-snapshot ${isActive ? "checked" : ""} />
-                <span class="switch" aria-hidden="true"></span>
-              </label>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0;">
-              <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Delete</span>
-              <button type="button" data-delete-snapshot class="danger" style="font-size: 11px; height: 30px; width: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0;" title="Delete Snapshot">
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 2px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 10px; font-weight: 700; color: #64748b;">Active</span>
+                <label class="toggle" style="display: inline-flex;" title="Activate/Deactivate Snapshot">
+                  <input type="checkbox" data-toggle-active-snapshot ${isActive ? "checked" : ""} />
+                  <span class="switch" aria-hidden="true"></span>
+                </label>
+              </div>
+              <button type="button" data-delete-snapshot class="danger" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Delete Snapshot">
+                <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                Delete
               </button>
             </div>
           </div>
-          <div style="display: flex; gap: 8px; margin-top: 8px; border-top: 1px solid #edf2f7; padding-top: 8px;">
-            <button type="button" data-save-snapshot-edit class="${isSaved ? "primary saved" : "primary"}" style="flex: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
-              ${isSaved ? `
-                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Saved
-              ` : `
-                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                Save Rules
-              `}
-            </button>
-            <button type="button" data-cancel-snapshot-edit class="mini-btn" style="flex: 1; font-size: 11px; min-height: 30px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">
-              Reset Draft
-            </button>
+
+          <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+            Intercept Rules (${rules.length})
+          </div>
+
+          <div class="snapshot-rules-nav" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px;">
+            ${rules.length ? rulesNavHtml : `<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding: 8px 0;">No rules added</div>`}
+          </div>
+
+          <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 8px; font-size: 11px; padding: 6px; flex-shrink: 0;">
+            + Add Intercept Rule
+          </button>
+        </div>
+
+        <!-- Right Column: Selected Rule Detail -->
+        <div class="snapshot-editor-right" style="flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #fff;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0;">
+            <div style="font-size: 12px; font-weight: 700; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px;">
+              ${activeRule ? `Rule #${activeRuleIdx + 1}: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px; color: #0284c7;">${escapeHtml(activeRule.method)} ${escapeHtml(formatPathDisplay(activeRule.pattern) || "/pattern")}</code>` : "Snapshot Rules Editor"}
+            </div>
+            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+              <button type="button" data-save-snapshot-edit class="${isSaved ? "primary saved" : "primary"}" style="font-size: 11px; padding: 4px 14px; min-height: 28px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+                ${isSaved ? `Saved` : `Save Rules`}
+              </button>
+              <button type="button" data-cancel-snapshot-edit class="mini-btn" style="font-size: 11px; padding: 4px 10px; min-height: 28px; border-radius: 6px; cursor: pointer;">
+                Reset Draft
+              </button>
+            </div>
+          </div>
+
+          <div style="flex: 1; overflow-y: auto; padding: 16px;">
+            ${activeRuleHtml}
           </div>
         </div>
-        <div class="snapshot-rules-list">
-          ${rulesHtml}
-        </div>
-        <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 8px;">+ Add Intercept Rule</button>
       </div>
     `;
   }
@@ -4769,8 +4875,10 @@
     const original = state.snapshots.find(s => String(s.id) === String(id));
     if (original) {
       state.editingSnapshotDraft = JSON.parse(JSON.stringify(original));
+      state.selectedSnapshotRuleIdx = 0;
     } else {
       state.editingSnapshotDraft = null;
+      state.selectedSnapshotRuleIdx = 0;
     }
   }
 
@@ -4785,6 +4893,24 @@
       404: "Not Found",
       500: "Internal Server Error"
     }[status] || "Mocked";
+  }
+
+  function formatPathDisplay(urlOrPattern) {
+    if (!urlOrPattern) return "/";
+    let str = String(urlOrPattern);
+    try {
+      if (str.startsWith("http://") || str.startsWith("https://")) {
+        str = new URL(str).pathname;
+      } else {
+        str = str.split("?")[0].split("#")[0];
+      }
+    } catch (_e) {
+      str = str.split("?")[0].split("#")[0];
+    }
+    const segments = str.split("/").filter(Boolean);
+    if (segments.length === 0) return "/";
+    const lastTwo = segments.slice(-2);
+    return "/" + lastTwo.join("/");
   }
 
   function shortUrl(url) {
