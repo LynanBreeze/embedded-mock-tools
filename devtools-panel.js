@@ -2046,6 +2046,15 @@
       notify();
     });
 
+    root.querySelector("[data-sw-indicator]")?.addEventListener("click", async () => {
+      if (state.useServiceWorker) {
+        await recoverServiceWorker();
+      } else if (canUseServiceWorker()) {
+        state.useServiceWorker = true;
+        await setupServiceWorker();
+      }
+    });
+
     root.querySelectorAll("[data-close-settings-modal]").forEach((el) => {
       el.addEventListener("click", () => {
         state.showSettingsModal = false;
@@ -2432,6 +2441,11 @@
     const spaceText = state.storageUsage 
       ? `Remaining storage space: ${state.storageUsage.remaining} MB (estimate quota: ${state.storageUsage.quota} MB)`
       : "Estimate unavailable";
+    const isSwActive = Boolean(
+      state.useServiceWorker &&
+        state.serviceWorkerReady &&
+        navigator.serviceWorker?.controller
+    );
     
     return `
       <div class="modal-overlay" data-close-settings-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
@@ -2445,6 +2459,14 @@
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">IndexedDB Storage</label>
               <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
                 ${spaceText}
+              </div>
+            </div>
+
+            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
+              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Service Worker Interceptor</label>
+              <div style="font-size: 11px; color: ${isSwActive ? '#059669' : '#64748b'}; margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+                <span class="sw-status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: ${isSwActive ? '#10b981' : '#94a3b8'}; display: inline-block;"></span>
+                <span>${isSwActive ? 'Active (Controlling native network requests)' : 'Inactive (Falling back to JS Fetch/XHR interceptor)'}</span>
               </div>
             </div>
 
@@ -2618,11 +2640,26 @@
       </div>
     ` : "";
 
+    const isSwActive = Boolean(
+      state.useServiceWorker &&
+        state.serviceWorkerReady &&
+        navigator.serviceWorker?.controller
+    );
+    const swTooltip = !canUseServiceWorker()
+      ? "Service Worker is not supported or restricted in this environment (falling back to JS Fetch/XHR interceptor)"
+      : isSwActive
+      ? "Service Worker is active and controlling requests. Click to re-verify status."
+      : "Service Worker is inactive (falling back to JS Fetch/XHR interceptor). Click to attempt activation.";
+
     return `
         <header class="topbar">
           <div>
             <strong>Network Mock</strong>
             <span>${state.requests.length} request${state.requests.length === 1 ? "" : "s"}</span>
+            <div class="sw-status-badge ${isSwActive ? "active" : "inactive"}" data-sw-indicator title="${escapeAttr(swTooltip)}">
+              <span class="sw-status-dot"></span>
+              <span class="sw-status-text">SW ${isSwActive ? "Active" : "Inactive"}</span>
+            </div>
           </div>
           <nav>
             <button type="button" data-enter-snapshot-mode class="icon-btn${state.snapshotSelectionMode ? " active" : ""}" title="Capture requests as Snapshot">
@@ -3482,8 +3519,54 @@
         justify-content: space-between;
         padding: 0 12px;
       }
-      .topbar div { display: flex; gap: 10px; align-items: baseline; }
+      .topbar div { display: flex; gap: 10px; align-items: center; }
       .topbar span { color: #aab8ce; font-size: 12px; }
+      .sw-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.2s ease;
+        line-height: 1.2;
+        margin-left: 4px;
+      }
+      .sw-status-badge.active {
+        background: rgba(16, 185, 129, 0.14);
+        border: 1px solid rgba(16, 185, 129, 0.35);
+        color: #34d399;
+      }
+      .sw-status-badge.inactive {
+        background: rgba(148, 163, 184, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        color: #94a3b8;
+      }
+      .sw-status-badge:hover {
+        opacity: 0.88;
+        transform: translateY(-0.5px);
+      }
+      .sw-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+      }
+      .sw-status-badge.active .sw-status-dot {
+        background: #10b981;
+        box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+      }
+      .sw-status-badge.inactive .sw-status-dot {
+        background: #94a3b8;
+      }
+      .sw-status-text {
+        font-size: 11px;
+        white-space: nowrap;
+      }
       .topbar nav { display: flex; gap: 8px; }
       .mock-head button, .primary, .danger {
         background: #25344c;
