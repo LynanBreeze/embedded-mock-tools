@@ -169,6 +169,53 @@
     );
   }
 
+  function isMockToolsController() {
+    const controller = navigator.serviceWorker?.controller;
+    return Boolean(controller && controller.scriptURL && controller.scriptURL.includes("mocktools-sw.js"));
+  }
+
+  function installServiceWorkerShield() {
+    if (!("serviceWorker" in navigator)) return;
+
+    if (typeof ServiceWorkerRegistration !== "undefined" && ServiceWorkerRegistration.prototype) {
+      const originalUnregister = ServiceWorkerRegistration.prototype.unregister;
+      if (originalUnregister && !ServiceWorkerRegistration.prototype.__mocktoolsShielded) {
+        ServiceWorkerRegistration.prototype.unregister = async function (...args) {
+          const scriptURL =
+            this.active?.scriptURL ||
+            this.waiting?.scriptURL ||
+            this.installing?.scriptURL ||
+            "";
+          if (scriptURL.includes("mocktools-sw.js")) {
+            console.warn("[MockTools] Prevented application from unregistering MockTools Service Worker.");
+            return false;
+          }
+          return originalUnregister.apply(this, args);
+        };
+        ServiceWorkerRegistration.prototype.__mocktoolsShielded = true;
+      }
+    }
+
+    if (navigator.serviceWorker && !navigator.serviceWorker.__mocktoolsShielded) {
+      const originalRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
+      navigator.serviceWorker.register = async function (scriptURL, options) {
+        const isMockToolsSW = typeof scriptURL === "string" && scriptURL.includes("mocktools-sw.js");
+        const regPromise = originalRegister(scriptURL, options);
+
+        if (!isMockToolsSW && state.useServiceWorker) {
+          console.warn(`[MockTools] App is registering custom Service Worker: ${scriptURL}. MockTools will maintain SW controller.`);
+          regPromise.then(() => {
+            setTimeout(() => {
+              recoverServiceWorker(true);
+            }, 150);
+          }).catch(() => {});
+        }
+        return regPromise;
+      };
+      navigator.serviceWorker.__mocktoolsShielded = true;
+    }
+  }
+
   async function registerServiceWorker() {
     try {
       return await navigator.serviceWorker.register("./mocktools-sw.js");
@@ -180,22 +227,23 @@
   async function setupServiceWorker() {
     if (!state.useServiceWorker) return;
     try {
+      installServiceWorkerShield();
       const registration = await registerServiceWorker();
       state.serviceWorkerRegistration = registration;
       await navigator.serviceWorker.ready;
-      state.serviceWorkerReady = Boolean(navigator.serviceWorker.controller);
+      state.serviceWorkerReady = isMockToolsController();
       syncServiceWorkerMocks();
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        state.serviceWorkerReady = true;
+        state.serviceWorkerReady = isMockToolsController();
         syncServiceWorkerMocks();
         syncServiceWorkerSnapshot();
         notify();
       });
-      window.addEventListener("focus", recoverServiceWorker);
+      window.addEventListener("focus", () => recoverServiceWorker());
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") recoverServiceWorker();
       });
-      if (!navigator.serviceWorker.controller) recoverServiceWorker();
+      if (!isMockToolsController()) recoverServiceWorker();
       notify();
     } catch (error) {
       state.serviceWorkerReady = false;
@@ -205,8 +253,9 @@
     }
   }
 
-  async function recoverServiceWorker() {
-    if (!state.useServiceWorker || navigator.serviceWorker?.controller) return;
+  async function recoverServiceWorker(force = false) {
+    if (!state.useServiceWorker) return;
+    if (!force && isMockToolsController()) return;
     if (serviceWorkerRecoveryPromise) return serviceWorkerRecoveryPromise;
 
     serviceWorkerRecoveryPromise = (async () => {
@@ -217,10 +266,10 @@
         await registration.update().catch(() => {});
         const readyRegistration = await navigator.serviceWorker.ready;
         state.serviceWorkerRegistration = readyRegistration;
-        if (readyRegistration.active && !navigator.serviceWorker.controller) {
+        if (readyRegistration.active && !isMockToolsController()) {
           readyRegistration.active.postMessage({ type: "MOCKTOOLS_CLAIM_CLIENT" });
         }
-        state.serviceWorkerReady = Boolean(navigator.serviceWorker.controller);
+        state.serviceWorkerReady = isMockToolsController();
         syncServiceWorkerMocks();
         syncServiceWorkerSnapshot();
       } catch (error) {
