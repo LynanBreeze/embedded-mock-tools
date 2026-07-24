@@ -1844,6 +1844,23 @@
         notify();
       });
     });
+    root.querySelectorAll("[data-toggle-snapshot-item]").forEach((input) => {
+      const handleToggle = (event) => {
+        event.stopPropagation();
+        const targetId = input.getAttribute("data-toggle-snapshot-item");
+        if (state.activeSnapshotId === targetId) {
+          state.activeSnapshotId = null;
+        } else {
+          state.activeSnapshotId = targetId;
+        }
+        state.playbackIndices = {};
+        persistActiveSnapshotId(state.activeSnapshotId);
+        syncServiceWorkerSnapshot();
+        notify();
+      };
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("change", handleToggle);
+    });
 
     root.querySelector("[data-global-toggle-snapshot]")?.addEventListener("change", (e) => {
       if (e.target.checked) {
@@ -2937,7 +2954,10 @@
           <strong>${escapeHtml(snapshot.name)}</strong>
           <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
         </span>
-        <span class="rule-status ${enabled ? "status-2xx" : "status-other"}">${enabled ? "ON" : "OFF"}</span>
+        <label class="toggle" style="justify-self: end; display: inline-flex;" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
+          <input type="checkbox" data-toggle-snapshot-item="${escapeAttr(snapshot.id)}" ${enabled ? "checked" : ""} />
+          <span class="switch" aria-hidden="true"></span>
+        </label>
       </button>
     `;
   }
@@ -3037,7 +3057,7 @@
                 </div>
                 <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
               </h3>
-              <textarea data-snapshot-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="10" style="width: 100%; min-height: 260px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.body)}</textarea>
+              <textarea data-snapshot-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="10" style="width: 100%; min-height: 320px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.body)}</textarea>
             </div>
           </div>
         `;
@@ -3894,7 +3914,7 @@
         font-size: 12px;
         line-height: 1.55;
         margin: 0;
-        max-height: 260px;
+        max-height: calc(Max(86vh, 560px) - 300px);
         overflow: auto;
         padding: 10px;
         white-space: pre-wrap;
