@@ -11,6 +11,11 @@
   box-sizing: border-box;
 }
 
+*:focus, *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 .github-corner {
   position: fixed;
   top: 12px;

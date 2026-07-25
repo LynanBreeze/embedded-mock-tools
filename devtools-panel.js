@@ -990,7 +990,7 @@
       state.lastGroupKey = currentGroupKey;
 
       const scrollPositions = {};
-      root.querySelectorAll(".mock-detail, .request-items, .mock-list, .modal-body").forEach((el) => {
+      root.querySelectorAll(".mock-detail, .request-items, .mock-list, .modal-body, .snapshot-rule-detail, .snapshot-rules-nav").forEach((el) => {
         if (el.classList.contains("mock-detail")) {
           scrollPositions[".mock-detail"] = isNewGroup ? 0 : el.scrollTop;
         } else if (el.classList.contains("request-items")) {
@@ -999,7 +999,21 @@
           scrollPositions[".mock-list"] = el.scrollTop;
         } else if (el.classList.contains("modal-body")) {
           scrollPositions[".modal-body"] = el.scrollTop;
+        } else if (el.classList.contains("snapshot-rule-detail")) {
+          scrollPositions[".snapshot-rule-detail"] = el.scrollTop;
+        } else if (el.classList.contains("snapshot-rules-nav")) {
+          scrollPositions[".snapshot-rules-nav"] = el.scrollTop;
         }
+      });
+
+      const textareaScrolls = {};
+      root.querySelectorAll("textarea").forEach((ta, idx) => {
+        const id = ta.getAttribute("data-snapshot-field")
+          ? `ta-snap-${ta.getAttribute("data-rule-idx") || ta.getAttribute("data-snapshot-rule-idx")}-${ta.getAttribute("data-step-idx") || ta.getAttribute("data-snapshot-step-idx")}-${ta.getAttribute("data-snapshot-field")}`
+          : ta.getAttribute("data-mock-field")
+          ? `ta-mock-${ta.getAttribute("data-mock-id")}-${ta.getAttribute("data-mock-field")}`
+          : `ta-idx-${idx}`;
+        textareaScrolls[id] = ta.scrollTop;
       });
 
       // Update Float Button
@@ -1065,10 +1079,21 @@
         if (el) el.scrollTop = scrollPositions[selector];
       });
 
+      root.querySelectorAll("textarea").forEach((ta, idx) => {
+        const id = ta.getAttribute("data-snapshot-field")
+          ? `ta-snap-${ta.getAttribute("data-rule-idx") || ta.getAttribute("data-snapshot-rule-idx")}-${ta.getAttribute("data-step-idx") || ta.getAttribute("data-snapshot-step-idx")}-${ta.getAttribute("data-snapshot-field")}`
+          : ta.getAttribute("data-mock-field")
+          ? `ta-mock-${ta.getAttribute("data-mock-id")}-${ta.getAttribute("data-mock-field")}`
+          : `ta-idx-${idx}`;
+        if (textareaScrolls[id] !== undefined) {
+          ta.scrollTop = textareaScrolls[id];
+        }
+      });
+
       if (focusedSelector) {
         const newFocusedInput = root.querySelector(focusedSelector);
         if (newFocusedInput) {
-          newFocusedInput.focus();
+          newFocusedInput.focus({ preventScroll: true });
           if (selectionStart !== null && selectionEnd !== null) {
             newFocusedInput.setSelectionRange(selectionStart, selectionEnd);
           }
@@ -1836,6 +1861,41 @@
         state.editingSnapshotId = state.selectedSnapshotId;
         notify();
       });
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        const snapshotId = button.getAttribute("data-select-snapshot");
+        state.contextMenu = {
+          type: "snapshot-item",
+          snapshotId: snapshotId,
+          ...contextMenuPosition(event)
+        };
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-export-single-snapshot]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const id = item.getAttribute("data-export-single-snapshot");
+        exportSingleSnapshot(id);
+        state.contextMenu = null;
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-delete-snapshot-item]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const id = item.getAttribute("data-delete-snapshot-item");
+        state.snapshots = state.snapshots.filter((s) => s.id !== id);
+        if (state.activeSnapshotId === id) {
+          state.activeSnapshotId = null;
+          persistActiveSnapshotId(null);
+          syncServiceWorkerSnapshot();
+        }
+        if (state.selectedSnapshotId === id) {
+          state.selectedSnapshotId = state.snapshots[0]?.id || null;
+        }
+        persistSnapshots(state.snapshots);
+        state.contextMenu = null;
+        notify();
+      });
     });
     root.querySelectorAll("[data-toggle-snapshot-selection]").forEach((input) => {
       input.addEventListener("click", (event) => {
@@ -2376,14 +2436,14 @@
     input.click();
   }
 
-  function exportSnapshots() {
-    const selectedSnap = state.snapshots.find((s) => s.id === state.selectedSnapshotId);
-    if (!selectedSnap) return;
+  function exportSingleSnapshot(id) {
+    const snap = state.snapshots.find((s) => s.id === id);
+    if (!snap) return;
     const payload = {
       version: 1,
       type: "snapshot-backup",
       exportedAt: new Date().toISOString(),
-      snapshot: selectedSnap
+      snapshot: snap
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], {
       type: "application/json"
@@ -2391,7 +2451,28 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `mocktools-snapshot-${selectedSnap.name.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `mocktools-snapshot-${snap.name.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSnapshots() {
+    if (!state.snapshots.length) return;
+    const payload = {
+      version: 1,
+      type: "snapshot-backup",
+      exportedAt: new Date().toISOString(),
+      snapshots: state.snapshots
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mocktools-snapshots-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -2408,16 +2489,35 @@
       try {
         const content = await file.text();
         const parsed = JSON.parse(content);
-        const importedSnap = parsed.snapshot;
-        if (!importedSnap || !importedSnap.name || !Array.isArray(importedSnap.rules)) {
+
+        let listToImport = [];
+        if (parsed.snapshot && typeof parsed.snapshot === "object") {
+          listToImport = [parsed.snapshot];
+        } else if (Array.isArray(parsed.snapshots)) {
+          listToImport = parsed.snapshots;
+        } else if (Array.isArray(parsed)) {
+          listToImport = parsed;
+        }
+
+        const validItems = listToImport.filter(
+          (item) => item && typeof item === "object" && item.name && Array.isArray(item.rules)
+        );
+
+        if (!validItems.length) {
           throw new Error("Invalid snapshot backup file");
         }
-        importedSnap.id = `snap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        importedSnap.rules.forEach((rule) => {
-          rule.id = `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        validItems.forEach((importedSnap) => {
+          const snapCopy = JSON.parse(JSON.stringify(importedSnap));
+          snapCopy.id = `snap-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          if (Array.isArray(snapCopy.rules)) {
+            snapCopy.rules.forEach((rule) => {
+              rule.id = `rule-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            });
+          }
+          state.snapshots.push(snapCopy);
         });
-        state.snapshots.push(importedSnap);
-        state.selectedSnapshotId = importedSnap.id;
+
         state.activeRightTab = "snapshots";
         persistSnapshots(state.snapshots);
         notify();
@@ -2819,10 +2919,10 @@
                         <button type="button" data-cancel-mock-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
                       </div>
                     ` : `
-                      <button type="button" class="action-select-btn icon-action-btn" data-start-mock-selection title="Select mock rules" aria-label="Select mock rules" ${filteredGroups.length ? "" : "disabled"}><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-                      <button type="button" class="action-add-btn icon-action-btn" data-add-mock title="Add mock rule" aria-label="Add mock rule"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-                      <button type="button" class="action-import-btn icon-action-btn" data-import-mocks title="Import mock backup" aria-label="Import mock backup"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                      <button type="button" class="action-export-btn icon-action-btn" data-export-mocks title="Export mock backup" aria-label="Export mock backup"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9M7 14l5-5 5 5M5 3h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                      <button type="button" class="action-select-btn icon-btn" data-start-mock-selection title="Batch select mock rules" aria-label="Batch select mock rules" ${filteredGroups.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+                      <button type="button" class="action-add-btn icon-btn" data-add-mock title="Add new mock rule" aria-label="Add new mock rule"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></button>
+                      <button type="button" class="action-import-btn icon-btn" data-import-mocks title="Import mock backup file" aria-label="Import mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                      <button type="button" class="action-export-btn icon-btn" data-export-mocks title="Export mock backup file" aria-label="Export mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
                     `}
                   </div>
                 </div>
@@ -2863,9 +2963,9 @@
                         <button type="button" data-cancel-snapshot-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
                       </div>
                     ` : `
-                      <button type="button" class="action-select-btn icon-action-btn" data-start-snapshot-selection title="Select snapshots" aria-label="Select snapshots" ${state.snapshots.length ? "" : "disabled"}><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-                      <button type="button" class="action-import-btn icon-action-btn" data-import-snapshots title="Import snapshot backup" aria-label="Import snapshot backup"><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                      <button type="button" class="action-export-btn icon-action-btn" data-export-snapshots title="Export snapshot backup" aria-label="Export snapshot backup" ${state.selectedSnapshotId ? "" : "disabled"}><svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9M7 14l5-5 5 5M5 3h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                      <button type="button" class="action-select-btn icon-btn" data-start-snapshot-selection title="Batch select snapshots" aria-label="Batch select snapshots" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+                      <button type="button" class="action-import-btn icon-btn" data-import-snapshots title="Import snapshot backup file" aria-label="Import snapshot backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                      <button type="button" class="action-export-btn icon-btn" data-export-snapshots title="Export snapshot backup file" aria-label="Export snapshot backup file" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
                     `}
                   </div>
                 </div>
@@ -3159,7 +3259,7 @@
             </div>
           </div>
 
-          <div style="flex: 1; overflow-y: auto; padding: 16px;">
+          <div class="snapshot-rule-detail" style="flex: 1; overflow-y: auto; padding: 16px;">
             ${activeRuleHtml}
           </div>
         </div>
@@ -3169,9 +3269,36 @@
 
   function contextMenuTemplate(menu) {
     const menuWidth = 216;
-    const menuHeight = menu.type === "mock-group" ? 80 : 150;
+    const menuHeight = menu.type === "mock-group" ? 80 : menu.type === "snapshot-item" ? 110 : 150;
     const boundsWidth = menu.width || window.innerWidth;
     const boundsHeight = menu.height || window.innerHeight;
+
+    if (menu.type === "snapshot-item") {
+      const snap = state.snapshots.find((s) => s.id === menu.snapshotId);
+      const top = Math.max(8, Math.min(menu.y, boundsHeight - 110));
+      const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
+      return `
+        <div class="menu-backdrop" data-close-menu></div>
+        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+          <button
+            type="button"
+            data-export-single-snapshot="${escapeAttr(menu.snapshotId)}"
+            role="menuitem"
+          >
+            <span class="menu-title">Export Single Snapshot</span>
+            <span class="menu-subtitle">${snap ? escapeHtml(snap.name) : "Snapshot backup"}</span>
+          </button>
+          <button
+            type="button"
+            data-delete-snapshot-item="${escapeAttr(menu.snapshotId)}"
+            role="menuitem"
+          >
+            <span class="menu-title" style="color: #df2222; font-weight: 800;">Delete Snapshot</span>
+            <span class="menu-subtitle">${snap ? escapeHtml(snap.name) : ""}</span>
+          </button>
+        </div>
+      `;
+    }
 
     if (menu.type === "mock-group") {
       const group = getMockGroups().find((g) => g.key === menu.groupKey);
@@ -3554,6 +3681,17 @@
         border-left: 1px solid rgba(255, 255, 255, 0.15);
         padding-left: 8px;
       }
+      *, *:focus, *:focus-visible, *:focus-within {
+        outline: none !important;
+      }
+      button:focus, button:focus-visible,
+      input:focus, input:focus-visible,
+      select:focus, select:focus-visible,
+      textarea:focus, textarea:focus-visible,
+      a:focus, a:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
       .devtools {
         background: #f7f9fc;
         border: 1px solid #cdd7e6;
@@ -3646,12 +3784,12 @@
         min-height: 30px;
         padding: 0 10px;
       }
-      .topbar nav .icon-btn {
+      .icon-btn {
         align-items: center;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
         border-radius: 6px;
-        color: #aab8ce;
+        color: #475569;
         cursor: pointer;
         display: inline-flex;
         height: 28px;
@@ -3661,11 +3799,25 @@
         transition: all 0.2s ease;
         box-sizing: border-box;
       }
-      .topbar nav .icon-btn svg {
+      .icon-btn svg {
         width: 14px;
         height: 14px;
       }
-      .topbar nav .icon-btn:hover {
+      .icon-btn:hover:not(:disabled) {
+        background: #e2e8f0;
+        border-color: #94a3b8;
+        color: #0f172a;
+      }
+      .icon-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+      .topbar nav .icon-btn {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #aab8ce;
+      }
+      .topbar nav .icon-btn:hover:not(:disabled) {
         background: rgba(255, 255, 255, 0.15);
         border-color: rgba(255, 255, 255, 0.25);
         color: #fff;
@@ -3719,7 +3871,6 @@
       }
       .request-filter .search-input:focus {
         outline: none;
-        border-color: #3b82f6;
       }
       .request-filter .sort-select {
         height: 26px;
@@ -3735,7 +3886,6 @@
       }
       .request-filter .sort-select:focus {
         outline: none;
-        border-color: #3b82f6;
       }
       .request-row {
         align-items: center;
@@ -4048,57 +4198,29 @@
         padding: 0;
         width: 28px;
       }
-      .mock-head-actions .toolbar-icon {
-        height: 15px;
-        width: 15px;
-      }
       .mock-head-actions button:disabled {
         cursor: not-allowed;
         opacity: .45;
       }
-      .mock-head-actions .action-select-btn {
+      .mock-head-actions .action-select-btn:hover:not(:disabled) {
         background: #eff6ff;
         border-color: #93c5fd;
         color: #1d4ed8;
-        font-weight: 700;
       }
-      .mock-head-actions .action-select-btn:hover {
-        background: #dbeafe;
-        border-color: #60a5fa;
-        color: #1e40af;
-      }
-      .mock-head-actions .action-add-btn {
-        background: #ecfdf5;
+      .mock-head-actions .action-add-btn:hover:not(:disabled) {
+        background: #f0fdf4;
         border-color: #86efac;
-        color: #047857;
-        font-weight: 700;
+        color: #16a34a;
       }
-      .mock-head-actions .action-add-btn:hover {
-        background: #d1fae5;
-        border-color: #34d399;
-        color: #065f46;
-      }
-      .mock-head-actions .action-import-btn {
+      .mock-head-actions .action-import-btn:hover:not(:disabled) {
         background: #fffbeb;
         border-color: #fcd34d;
-        color: #a16207;
-        font-weight: 700;
+        color: #d97706;
       }
-      .mock-head-actions .action-import-btn:hover {
-        background: #fef3c7;
-        border-color: #f59e0b;
-        color: #854d0e;
-      }
-      .mock-head-actions .action-export-btn {
+      .mock-head-actions .action-export-btn:hover:not(:disabled) {
         background: #f5f3ff;
         border-color: #c4b5fd;
-        color: #6d28d9;
-        font-weight: 700;
-      }
-      .mock-head-actions .action-export-btn:hover {
-        background: #ede9fe;
-        border-color: #a78bfa;
-        color: #5b21b6;
+        color: #7c3aed;
       }
       .mock-head-actions .selection-cancel-btn {
         background: #f8fafc;
@@ -4501,7 +4623,7 @@
         transform: translateX(12px);
       }
       .toggle input:focus-visible + .switch {
-        box-shadow: 0 0 0 3px rgba(31, 111, 235, .22);
+        box-shadow: none;
       }
       .pair {
         display: grid;
@@ -4849,7 +4971,7 @@
         transition: border-color 0.2s ease;
       }
       .snapshot-rule-card select:focus, .snapshot-rule-card input:focus {
-        border-color: #2563eb;
+        outline: none;
       }
       .step-card label {
         font-weight: 600;
@@ -4864,7 +4986,7 @@
         transition: border-color 0.2s ease;
       }
       .step-card input:focus, .step-card textarea:focus {
-        border-color: #2563eb;
+        outline: none;
       }
       .request-filter .sort-select,
       .endpoint-global-settings select,
