@@ -961,15 +961,38 @@
     // Create elements once
     let floatBtn = root.querySelector(".float-button");
     let devtools = root.querySelector(".devtools");
+    let backdrop = root.querySelector(".panel-backdrop");
 
-    if (!floatBtn || !devtools) {
+    if (!floatBtn || !devtools || !backdrop) {
       root.innerHTML = `
+        <div class="panel-backdrop" data-close></div>
         <button class="float-button" type="button" title="Open Network Mock panel"></button>
         <section class="devtools"></section>
       `;
       floatBtn = root.querySelector(".float-button");
       devtools = root.querySelector(".devtools");
+      backdrop = root.querySelector(".panel-backdrop");
     }
+
+    let isBodyScrollLocked = false;
+    const lockBodyScroll = () => {
+      if (!isBodyScrollLocked) {
+        isBodyScrollLocked = true;
+        document.body.dataset.prevOverflow = document.body.style.overflow || "";
+        document.body.style.overflow = "hidden";
+      }
+    };
+    const unlockBodyScroll = () => {
+      if (isBodyScrollLocked) {
+        isBodyScrollLocked = false;
+        if (document.body.dataset.prevOverflow !== undefined) {
+          document.body.style.overflow = document.body.dataset.prevOverflow;
+          delete document.body.dataset.prevOverflow;
+        } else {
+          document.body.style.overflow = "";
+        }
+      }
+    };
 
     const render = () => {
       const activeElement = shadow.activeElement;
@@ -1066,9 +1089,13 @@
       if (state.expanded) {
         devtools.classList.add("expanded");
         floatBtn.classList.add("hidden");
+        backdrop?.classList.add("visible");
+        lockBodyScroll();
       } else {
         devtools.classList.remove("expanded");
         floatBtn.classList.remove("hidden");
+        backdrop?.classList.remove("visible");
+        unlockBodyScroll();
       }
 
       bindPanelEvents(root);
@@ -1100,6 +1127,18 @@
         }
       }
     };
+
+    const handleOutsidePointer = (event) => {
+      if (!state.expanded) return;
+      const path = event.composedPath ? event.composedPath() : [];
+      if (path.includes(devtools) || path.includes(floatBtn)) {
+        return;
+      }
+      state.expanded = false;
+      state.contextMenu = null;
+      notify();
+    };
+    window.addEventListener("pointerdown", handleOutsidePointer);
 
     state.subscribers.add(render);
     render();
@@ -1224,10 +1263,12 @@
 
       startIdleTimer();
     }
-    root.querySelector("[data-close]")?.addEventListener("click", () => {
-      state.expanded = false;
-      state.contextMenu = null;
-      notify();
+    root.querySelectorAll("[data-close]").forEach((el) => {
+      el.addEventListener("click", () => {
+        state.expanded = false;
+        state.contextMenu = null;
+        notify();
+      });
     });
     root.querySelector("[data-clear]")?.addEventListener("click", () => {
       state.requests = [];
@@ -3691,6 +3732,24 @@
       a:focus, a:focus-visible {
         outline: none !important;
         box-shadow: none !important;
+      }
+      .panel-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 2147483645;
+        background: rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+        pointer-events: none;
+      }
+      .panel-backdrop.visible {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
       }
       .devtools {
         background: #f7f9fc;
