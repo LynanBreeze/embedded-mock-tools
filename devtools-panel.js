@@ -10,6 +10,7 @@
   const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
   const MAX_REQUESTS = 200;
   const MAX_RESPONSE_BODY_BYTES = 256 * 1024;
+  const SERVICE_WORKER_SCRIPT_NAME = "mocktools-sw.js";
   const state = {
     installed: false,
     expanded: false,
@@ -171,7 +172,7 @@
 
   function isMockToolsController() {
     const controller = navigator.serviceWorker?.controller;
-    return Boolean(controller && controller.scriptURL && controller.scriptURL.includes("mocktools-sw.js"));
+    return Boolean(controller && controller.scriptURL && controller.scriptURL.includes(SERVICE_WORKER_SCRIPT_NAME));
   }
 
   function installServiceWorkerShield() {
@@ -186,7 +187,7 @@
             this.waiting?.scriptURL ||
             this.installing?.scriptURL ||
             "";
-          if (scriptURL.includes("mocktools-sw.js")) {
+          if (scriptURL.includes(SERVICE_WORKER_SCRIPT_NAME)) {
             console.warn("[MockTools] Prevented application from unregistering MockTools Service Worker.");
             return false;
           }
@@ -199,7 +200,7 @@
     if (navigator.serviceWorker && !navigator.serviceWorker.__mocktoolsShielded) {
       const originalRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
       navigator.serviceWorker.register = async function (scriptURL, options) {
-        const isMockToolsSW = typeof scriptURL === "string" && scriptURL.includes("mocktools-sw.js");
+        const isMockToolsSW = typeof scriptURL === "string" && scriptURL.includes(SERVICE_WORKER_SCRIPT_NAME);
         const regPromise = originalRegister(scriptURL, options);
 
         if (!isMockToolsSW && state.useServiceWorker) {
@@ -218,9 +219,9 @@
 
   async function registerServiceWorker() {
     try {
-      return await navigator.serviceWorker.register("./mocktools-sw.js");
+      return await navigator.serviceWorker.register(`./${SERVICE_WORKER_SCRIPT_NAME}`);
     } catch (error) {
-      return navigator.serviceWorker.register("/mocktools-sw.js");
+      return navigator.serviceWorker.register(`/${SERVICE_WORKER_SCRIPT_NAME}`);
     }
   }
 
