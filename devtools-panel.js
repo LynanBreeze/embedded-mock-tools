@@ -711,14 +711,16 @@
       defineReadonly(xhr, "statusText", statusText(mock.status));
       defineReadonly(xhr, "response", mock.body);
       defineReadonly(xhr, "responseText", mock.body);
+      const responseHeaders = mockResponseHeaders(mock);
       xhr.getAllResponseHeaders = () =>
-        Object.entries(Object.fromEntries(mockResponseHeaders(mock).entries()))
+        Object.entries(Object.fromEntries(responseHeaders.entries()))
           .map(([key, value]) => `${key}: ${value}`)
           .join("\r\n");
+      xhr.getResponseHeader = (name) => responseHeaders.get(name);
       finishRequest(requestId, {
         status: mock.status,
         duration: performance.now() - startTime,
-        responseHeaders: mock.headers || {},
+        responseHeaders: Object.fromEntries(responseHeaders.entries()),
         responseText: mock.body,
         mocked: true,
         mockId: mock.id,
