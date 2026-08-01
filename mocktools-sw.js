@@ -6,6 +6,8 @@ let playbackIndices = {};
 let mockRulesByMethod = new Map();
 let snapshotRulesByMethod = new Map();
 let patternMatcherCache = new Map();
+let mocksVersion = 0;
+let stateRevision = 0;
 let stateReadyPromise = null;
 let stateInitialized = false;
 
@@ -28,10 +30,16 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "MOCKTOOLS_CLAIM_CLIENT") {
     event.waitUntil(self.clients.claim());
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_MOCKS") {
+    const version = Number(event.data.version || 0);
+    if (version && version < mocksVersion) return;
+    stateRevision += 1;
+    mocksVersion = version || mocksVersion + 1;
     mocks = Array.isArray(event.data.mocks) ? event.data.mocks : [];
     mockRulesByMethod = buildRuleIndex(mocks);
     stateInitialized = true;
+    event.ports[0]?.postMessage({ type: "MOCKTOOLS_MOCKS_UPDATED", version: mocksVersion });
   } else if (event.data?.type === "MOCKTOOLS_UPDATE_SNAPSHOT") {
+    stateRevision += 1;
     activeSnapshotRules = Array.isArray(event.data.activeSnapshotRules) ? event.data.activeSnapshotRules : null;
     snapshotRulesByMethod = buildRuleIndex(activeSnapshotRules || []);
     playbackIndices = {};
@@ -71,6 +79,7 @@ function ensureState() {
 }
 
 async function loadStateFromIndexedDb() {
+  const loadRevision = stateRevision;
   const db = await openStateDb();
   const values = await new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, "readonly");
@@ -86,6 +95,9 @@ async function loadStateFromIndexedDb() {
   db.close();
 
   const [persistedMocks, snapshots, activeSnapshotId] = values;
+  // A live page may have pushed newer rules while this read was in flight.
+  // Never let the older persisted snapshot overwrite those in-memory rules.
+  if (loadRevision !== stateRevision) return;
   mocks = Array.isArray(persistedMocks) ? persistedMocks : [];
   mockRulesByMethod = buildRuleIndex(mocks);
   const activeSnapshot = Array.isArray(snapshots)

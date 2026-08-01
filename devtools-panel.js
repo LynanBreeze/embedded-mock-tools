@@ -63,6 +63,7 @@
   let pendingMocksPersistence = null;
   let mocksPersistenceTimer = null;
   let mocksPersistenceWritePromise = null;
+  let serviceWorkerMocksVersion = 0;
   let serviceWorkerRecoveryPromise = null;
 
   function init(options = {}) {
@@ -287,14 +288,30 @@
 
   function syncServiceWorkerMocks() {
     if (!state.useServiceWorker) return;
-    const worker =
-      navigator.serviceWorker.controller ||
-      state.serviceWorkerRegistration?.active ||
-      state.serviceWorkerRegistration?.waiting ||
-      state.serviceWorkerRegistration?.installing;
-    worker?.postMessage({
+    const workers = [
+      navigator.serviceWorker.controller,
+      state.serviceWorkerRegistration?.active,
+      state.serviceWorkerRegistration?.waiting,
+      state.serviceWorkerRegistration?.installing
+    ].filter(Boolean);
+    const uniqueWorkers = workers.filter((worker, index) => workers.indexOf(worker) === index);
+    if (!uniqueWorkers.length) return;
+
+    const version = Math.max(Date.now(), serviceWorkerMocksVersion + 1);
+    serviceWorkerMocksVersion = version;
+    const message = {
       type: "MOCKTOOLS_UPDATE_MOCKS",
+      version,
       mocks: state.mockEnabled ? state.mocks : []
+    };
+
+    // Send the update to every available worker state. A newly activated
+    // worker can otherwise miss the update when the controller changes just
+    // after a rule is edited.
+    uniqueWorkers.forEach((worker) => {
+      try {
+        worker.postMessage(message);
+      } catch (_error) {}
     });
   }
 
@@ -999,10 +1016,20 @@
 
     const render = () => {
       const activeElement = shadow.activeElement;
+      // Group fields are edited in a modal and their values can change the
+      // group key. Do not replace the panel while one is focused: unrelated
+      // state updates (for example, incoming requests) would otherwise
+      // replace the input node and lose focus. The field's change handler
+      // schedules the refresh after it is blurred.
+      if (activeElement?.hasAttribute("data-group-field")) return;
       const focusedSelector = activeElement && (
         activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
         activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" :
-        activeElement.hasAttribute("data-group-field") ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-key="${cssEscape(activeElement.getAttribute("data-group-key"))}"]` :
+        activeElement.hasAttribute("data-group-field")
+          ? activeElement.hasAttribute("data-group-editor-id")
+            ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-editor-id="${cssEscape(activeElement.getAttribute("data-group-editor-id"))}"]`
+            : `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-key="${cssEscape(activeElement.getAttribute("data-group-key"))}"]`
+          :
         activeElement.hasAttribute("data-snapshot-field") ? `[data-snapshot-field="${activeElement.getAttribute("data-snapshot-field")}"][data-rule-idx="${activeElement.getAttribute("data-rule-idx") || activeElement.getAttribute("data-snapshot-rule-idx")}"][data-step-idx="${activeElement.getAttribute("data-step-idx") || activeElement.getAttribute("data-snapshot-step-idx")}"]` :
         activeElement.hasAttribute("data-rule-field") ? `[data-rule-field="${activeElement.getAttribute("data-rule-field")}"][data-rule-idx="${activeElement.getAttribute("data-rule-idx")}"]` : null
       );
@@ -1820,7 +1847,7 @@
     });
 
     root.querySelectorAll('[data-group-field="pattern"]').forEach((input) => {
-      input.addEventListener("input", (e) => {
+      input.addEventListener("change", (e) => {
         const groupKey = input.getAttribute("data-group-key");
         const newPattern = e.target.value;
         const [method, pattern] = groupKey.split("::");
@@ -1831,7 +1858,6 @@
           return mock;
         });
         saveMocks();
-        notify();
       });
     });
 
@@ -3440,24 +3466,25 @@
 
   function endpointDetailTemplate(group) {
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
+    const editorId = selected?.id || group.mocks[0]?.id || "";
     return `
       <div class="endpoint-global-settings" style="border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
         <div style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;">
           <label style="width: 80px; flex-shrink: 0; margin-bottom: 0;">Method
-            <select data-group-field="method" data-group-key="${escapeAttr(group.key)}">
+            <select data-group-field="method" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
             </select>
           </label>
           <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
-            <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" />
+            <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
           </label>
         </div>
         <div style="display: flex; gap: 8px; align-items: flex-start;">
           <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
-            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" />
+            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
           </label>
           <label style="flex-grow: 1; margin-bottom: 0;">Alias Name
-            <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
+            <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
           </label>
         </div>
       </div>
