@@ -294,7 +294,7 @@
       state.serviceWorkerRegistration?.waiting,
       state.serviceWorkerRegistration?.installing
     ].filter(Boolean);
-    const uniqueWorkers = workers.filter((worker, index) => workers.indexOf(worker) === index);
+    const uniqueWorkers = [...new Set(workers)];
     if (!uniqueWorkers.length) return;
 
     const version = Math.max(Date.now(), serviceWorkerMocksVersion + 1);
