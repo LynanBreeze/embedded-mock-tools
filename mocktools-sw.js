@@ -139,10 +139,10 @@ async function mockResponse(mock) {
 
 function findSnapshotResponse(method, url) {
   if (!activeSnapshotRules || activeSnapshotRules.length === 0) return null;
-  const rule = getRuleCandidates(snapshotRulesByMethod, method).find((r) => {
+  const rule = getRuleCandidates(snapshotRulesByMethod, method).filter((r) => {
     const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
     return methodMatches && patternMatches(r.pattern, url);
-  });
+  }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0];
   if (!rule || !rule.responses || rule.responses.length === 0) return null;
 
   if (playbackIndices[rule.id] === undefined) {
@@ -177,11 +177,11 @@ function findSnapshotResponse(method, url) {
 }
 
 function findMock(method, url) {
-  return getRuleCandidates(mockRulesByMethod, method).find((mock) => {
+  return getRuleCandidates(mockRulesByMethod, method).filter((mock) => {
     if (!mock.enabled) return false;
     const methodMatches = mock.method === "ALL" || mock.method === String(method || "GET").toUpperCase();
     return methodMatches && patternMatches(mock.pattern, url);
-  });
+  }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0] || null;
 }
 
 function patternMatches(pattern, url) {

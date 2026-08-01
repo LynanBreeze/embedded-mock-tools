@@ -785,10 +785,10 @@
     if (!activeSnap) return null;
 
     const candidates = getMatcherCandidates(activeSnap.rules, snapshotMatcherCache, method);
-    const rule = candidates.find((r) => {
+    const rule = candidates.filter((r) => {
       const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
       return methodMatches && patternMatches(r.pattern, url);
-    });
+    }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0];
     if (!rule || !rule.responses || rule.responses.length === 0) return null;
 
     if (state.playbackIndices[rule.id] === undefined) {
@@ -825,11 +825,11 @@
 
   function findMock(method, url) {
     if (!state.mockEnabled) return null;
-    return getMatcherCandidates(state.mocks, mockMatcherCache, method).find((mock) => {
+    return getMatcherCandidates(state.mocks, mockMatcherCache, method).filter((mock) => {
       if (!mock.enabled) return false;
       const methodMatches = mock.method === "ALL" || mock.method === method.toUpperCase();
       return methodMatches && patternMatches(mock.pattern, url);
-    });
+    }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0] || null;
   }
 
   function shouldLetServiceWorkerMock() {

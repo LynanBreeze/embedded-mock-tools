@@ -96,7 +96,7 @@ Existing persisted configuration takes precedence over `seedMocks`. To use the s
 - A normal string matches a URL substring, for example `"/api/users"`.
 - A pattern wrapped in `/` is treated as a regular expression, for example `"/\\/api\\/users\\/\\d+/"`.
 - Invalid regular expressions fall back to substring matching.
-- For the same method and pattern, the first enabled rule in list order is used.
+- When multiple enabled rules match, the longest pattern is used; rules with equal-length patterns keep list order.
 
 ## Snapshot Playback
 
