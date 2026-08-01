@@ -586,22 +586,31 @@
 
       try {
         const response = await state.originalFetch(input, initOptions);
-        const cloned = response.clone();
-        const responseText = await readResponseText(cloned);
         const mocked = response.headers.get("x-mocktools-mocked") === "1";
         const snapshotted = response.headers.get("x-mocktools-snapshotted") === "1";
-        finishRequest(request.id, {
+        const responsePatch = {
           status: response.status,
           duration: performance.now() - startedAt,
           responseHeaders: objectFromHeaders(response.headers),
-          responseText,
           mocked,
           snapshotted,
           mockId: response.headers.get("x-mocktools-mock-id") || ""
-        });
+        };
+
+        // A passthrough response is complete as soon as fetch resolves. Some
+        // upstream 503 responses have a body that cannot be read or cloned;
+        // that must not leave the request stuck in the initial pending state.
+        finishRequest(request.id, responsePatch);
+        try {
+          responsePatch.responseText = await readResponseText(response.clone());
+        } catch (bodyError) {
+          responsePatch.error = bodyError.message || "Failed to read response body";
+        }
+        finishRequest(request.id, responsePatch);
         return response;
       } catch (error) {
         finishRequest(request.id, {
+          status: Number(error?.status) || 0,
           error: error.message,
           duration: performance.now() - startedAt
         });
@@ -710,6 +719,7 @@
         });
         xhr.addEventListener("error", () => {
           finishRequest(meta.id, {
+            status: Number(xhr.status) || 0,
             error: "XHR network error",
             duration: performance.now() - meta.startTime
           });
