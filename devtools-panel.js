@@ -1116,9 +1116,14 @@
         floatBtn.classList.remove("tucked-left");
       }
 
+      const snapshotEnabled = Boolean(state.activeSnapshotId);
       const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
+      const snapshotStatusTitle = snapshotEnabled ? "Snapshot intercepting is active" : "Snapshot intercepting is paused";
       floatBtn.innerHTML = `
-        <span class="indicator-dot ${state.mockEnabled ? "active" : ""}" title="${statusTitle}"></span>
+        <span class="status-indicators" aria-label="Mock and Snapshot status">
+          <i class="indicator-dot mock-indicator ${state.mockEnabled ? "active" : ""}" title="${statusTitle}" aria-label="${statusTitle}"></i>
+          <i class="indicator-dot snapshot-indicator ${snapshotEnabled ? "active" : ""}" title="${snapshotStatusTitle}" aria-label="${snapshotStatusTitle}"></i>
+        </span>
         <span>Net</span>
         <b>${state.requests.length}</b>
         <small>${activeMocks} mock${activeMocks === 1 ? "" : "s"}</small>
@@ -2981,7 +2986,7 @@
                   ${state.mockGroupSelectionMode ? "" : `
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <strong>Mock rules</strong>
-                      <label class="toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
+                      <label class="toggle mock-toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
                         <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
                       </label>
@@ -3025,7 +3030,7 @@
                   ${state.snapshotListSelectionMode ? "" : `
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <strong>Snapshots</strong>
-                      <label class="toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
+                      <label class="toggle snapshot-toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
                         <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
                       </label>
@@ -3134,7 +3139,7 @@
           <strong>${escapeHtml(snapshot.name)}</strong>
           <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
         </span>
-        <label class="toggle" style="justify-self: end; display: inline-flex;" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
+        <label class="toggle snapshot-toggle" style="justify-self: end; display: inline-flex;" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
           <input type="checkbox" data-toggle-snapshot-item="${escapeAttr(snapshot.id)}" ${enabled ? "checked" : ""} />
           <span class="switch" aria-hidden="true"></span>
         </label>
@@ -3298,7 +3303,7 @@
             <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 2px;">
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span style="font-size: 10px; font-weight: 700; color: #64748b;">Active</span>
-                <label class="toggle" style="display: inline-flex;" title="Activate/Deactivate Snapshot">
+                <label class="toggle snapshot-toggle" style="display: inline-flex;" title="Activate/Deactivate Snapshot">
                   <input type="checkbox" data-toggle-active-snapshot ${isActive ? "checked" : ""} />
                   <span class="switch" aria-hidden="true"></span>
                 </label>
@@ -3709,17 +3714,38 @@
         visibility: hidden !important;
         transform: scale(0.9);
       }
-      .indicator-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #64748b;
-        transition: background 0.3s ease, box-shadow 0.3s ease;
-        flex-shrink: 0;
+      .status-indicators {
+        align-items: center;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 9999px;
+        display: inline-flex;
+        gap: 5px;
+        padding: 4px 6px;
       }
-      .indicator-dot.active {
-        background: #10b981;
-        box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+      .float-button .indicator-dot {
+        border-radius: 50%;
+        display: block;
+        flex-shrink: 0;
+        height: 9px;
+        opacity: .42;
+        transition: background 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+        width: 9px;
+      }
+      .float-button .mock-indicator {
+        background: #18a67d;
+      }
+      .float-button .snapshot-indicator {
+        background: #a78bfa;
+      }
+      .float-button .indicator-dot.active {
+        opacity: 1;
+      }
+      .float-button .mock-indicator.active {
+        background: #34d399;
+        box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.28), 0 0 11px rgba(52, 211, 153, 1);
+      }
+      .float-button .snapshot-indicator.active {
+        box-shadow: 0 0 8px rgba(167, 139, 250, 0.95);
       }
       .float-button.tucked {
         width: 42px !important;
@@ -3745,7 +3771,7 @@
       .float-button:active {
         transform: translateY(0);
       }
-      .float-button span { 
+      .float-button > span:not(.status-indicators) {
         font-size: 11px; 
         font-weight: 700; 
         text-transform: uppercase; 
@@ -4421,6 +4447,9 @@
       .mock-row.enabled .rule-dot {
         background: #18a67d;
       }
+      .snapshots-content .mock-row.enabled .rule-dot {
+        background: #8b5cf6;
+      }
       .rule-main {
         display: grid;
         gap: 2px;
@@ -4717,6 +4746,10 @@
       .toggle input:checked + .switch {
         background: #18a67d;
         border-color: #18a67d;
+      }
+      .snapshot-toggle input:checked + .switch {
+        background: #8b5cf6;
+        border-color: #8b5cf6;
       }
       .toggle input:checked + .switch::after {
         transform: translateX(12px);
