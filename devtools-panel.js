@@ -4040,6 +4040,11 @@
         border-color: #18a67d;
         box-shadow: 0 0 0 3px rgba(24, 166, 125, .14);
       }
+      .request-row.mocked .mock-dot[title^="Snapshotted"] {
+        background: #8b5cf6;
+        border-color: #8b5cf6;
+        box-shadow: 0 0 0 3px rgba(60, 182, 234, .14);
+      }
       .method {
         color: #9b3f23;
         font-size: 12px;
@@ -4113,6 +4118,16 @@
         background: #d1fae5;
         border-color: #34d399;
         color: #065f46;
+      }
+      .meta .source-link[data-source-type="snapshot"] {
+        border-color: #c4b5fd;
+        background: #faf5ff;
+        color: #7c3aed;
+      }
+        .meta .source-link[data-source-type="snapshot"]:hover {
+        border-color: #a78bfa;
+        background: #faf5ff;
+        color: #6d28d9;
       }
       .error { color: #b42318; font-weight: 700; }
       .code-section { position: relative; margin-bottom: 14px; }
