@@ -26,7 +26,7 @@ Open `index.html` directly to try the demo. In this mode, the tool uses in-page 
 For Service Worker and native Network panel support, serve the files through a local HTTP server:
 
 ```sh
-python3 -m http.server 5173
+python3 -m http.server 5173 --bind 127.0.0.1
 ```
 
 Then open <http://localhost:5173/>.
