@@ -1619,6 +1619,24 @@
         notify();
       });
     });
+    root.querySelectorAll("[data-toggle-mock-group]").forEach((input) => {
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.parentElement?.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("change", (event) => {
+        event.stopPropagation();
+        const groupKey = input.getAttribute("data-toggle-mock-group");
+        const group = getMockGroups().find((item) => item.key === groupKey);
+        if (!group) return;
+
+        const firstMockId = group.mocks[0]?.id;
+        state.mocks = state.mocks.map((mock) => {
+          if (endpointKey(mock.method, mock.pattern) !== groupKey) return mock;
+          return { ...mock, enabled: event.target.checked && mock.id === firstMockId };
+        });
+        state.mocks = enforceSingleActivePerEndpoint(state.mocks);
+        saveMocks();
+      });
+    });
     root.querySelectorAll("[data-delete-mock-group]").forEach((item) => {
       item.addEventListener("click", () => {
         const groupKey = item.getAttribute("data-delete-mock-group");
@@ -2339,7 +2357,8 @@
 
         persistSnapshots(state.snapshots);
 
-        if (cleanDraft.id === state.activeSnapshotId) {
+        if (String(cleanDraft.id) === String(state.activeSnapshotId)) {
+          state.playbackIndices = {};
           syncServiceWorkerSnapshot();
         }
 
@@ -3120,6 +3139,10 @@
           <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
+        <label class="toggle rule-toggle" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
+          <input type="checkbox" data-toggle-mock-group="${escapeAttr(group.key)}" ${group.activeMock ? "checked" : ""} />
+          <span class="switch" aria-hidden="true"></span>
+        </label>
       </button>
     `;
   }
@@ -4425,7 +4448,7 @@
         cursor: pointer;
         display: grid;
         gap: 8px;
-        grid-template-columns: 10px minmax(0, 1fr) 42px;
+        grid-template-columns: 10px minmax(0, 1fr) 42px 28px;
         height: 44px;
         min-height: 44px;
         padding: 7px 10px;
@@ -4436,7 +4459,7 @@
         background: #eaf2ff;
       }
       .mock-row.selection-active {
-        grid-template-columns: 16px 10px minmax(0, 1fr) 42px;
+        grid-template-columns: 16px 10px minmax(0, 1fr) 42px 28px;
       }
       .mock-row.selection-active.active:not(.selected) {
         background: transparent;
@@ -4492,6 +4515,11 @@
         font-variant-numeric: tabular-nums;
         font-weight: 800;
         text-align: right;
+      }
+      .rule-toggle {
+        cursor: pointer;
+        gap: 0;
+        justify-content: flex-end;
       }
       .mock-card {
         border: 1px solid #d9e1ee;
