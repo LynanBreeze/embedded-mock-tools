@@ -16,6 +16,7 @@
     expanded: false,
     selectedId: null,
     selectedMockId: null,
+    pendingMockId: null,
     savedMockId: null,
     contextMenu: null,
     persistenceReady: false,
@@ -158,7 +159,8 @@
   }
 
   function saveMocks(mocks = state.mocks, options = {}) {
-    persistMocks(mocks);
+    const committedMocks = mocks.filter((mock) => mock.id !== state.pendingMockId);
+    persistMocks(committedMocks);
     syncServiceWorkerMocks();
     if (!options.silent) notify();
   }
@@ -302,7 +304,7 @@
     const message = {
       type: "MOCKTOOLS_UPDATE_MOCKS",
       version,
-      mocks: state.mockEnabled ? state.mocks : []
+      mocks: state.mockEnabled ? state.mocks.filter((mock) => mock.id !== state.pendingMockId) : []
     };
 
     // Send the update to every available worker state. A newly activated
@@ -835,7 +837,7 @@
 
   function findMock(method, url) {
     if (!state.mockEnabled) return null;
-    return getMatcherCandidates(state.mocks, mockMatcherCache, method).filter((mock) => {
+    return getMatcherCandidates(state.mocks.filter((mock) => mock.id !== state.pendingMockId), mockMatcherCache, method).filter((mock) => {
       if (!mock.enabled) return false;
       const methodMatches = mock.method === "ALL" || mock.method === method.toUpperCase();
       return methodMatches && patternMatches(mock.pattern, url);
@@ -1423,6 +1425,9 @@
       notify();
     });
     root.querySelector("[data-add-mock]")?.addEventListener("click", () => {
+      if (state.pendingMockId) {
+        state.mocks = state.mocks.filter((mock) => mock.id !== state.pendingMockId);
+      }
       const mock = normalizeMock(
         {
           enabled: true,
@@ -1435,10 +1440,13 @@
         },
         state.mocks.length
       );
-      state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
+      // Keep the new rule out of committed endpoint state until Save. In
+      // particular, it must not deactivate an existing rule while editing.
+      state.mocks = [mock, ...state.mocks];
+      state.pendingMockId = mock.id;
       state.selectedMockId = mock.id;
       state.editingMockId = mock.id;
-      saveMocks();
+      notify();
     });
     root.querySelector("[data-export-mocks]")?.addEventListener("click", exportMocks);
     root.querySelector("[data-import-mocks]")?.addEventListener("click", importMocksFromFile);
@@ -1790,6 +1798,18 @@
               btn.disabled = false;
             }, 1500);
           }
+      });
+    });
+    root.querySelectorAll('textarea[data-mock-field="body"]').forEach((textarea) => {
+      textarea.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+
+        event.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const indent = "  ";
+        textarea.setRangeText(indent, start, end, "end");
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
       });
     });
     root.querySelectorAll("[data-add-config]").forEach((button) => {
@@ -2294,6 +2314,10 @@
 
     root.querySelectorAll("[data-close-details-modal]").forEach((el) => {
       el.addEventListener("click", () => {
+        if (state.pendingMockId) {
+          state.mocks = state.mocks.filter((mock) => mock.id !== state.pendingMockId);
+          state.pendingMockId = null;
+        }
         state.selectedMockId = null;
         state.selectedSnapshotId = null;
         state.editingMockId = null;
@@ -2443,6 +2467,9 @@
       return { ...mock, ...patch };
     });
     state.mocks = enforceSingleActiveForMock(state.mocks, id);
+    if (state.pendingMockId === id) {
+      state.pendingMockId = null;
+    }
     state.selectedMockId = id;
     state.savedMockId = id;
     saveMocks();
@@ -2694,7 +2721,7 @@
         headers: request.responseHeaders && Object.keys(request.responseHeaders).length
           ? request.responseHeaders
           : { "content-type": "application/json" },
-        body: request.responseText || JSON.stringify({ ok: true }, null, 2)
+        body: formatMockBody(request.responseText) || JSON.stringify({ ok: true }, null, 2)
       },
       state.mocks.length
     );
@@ -2760,6 +2787,7 @@
     }
 
     state.mocks = [];
+    state.pendingMockId = null;
     state.snapshots = [];
     state.requests = [];
     state.selectedId = null;
@@ -5322,6 +5350,16 @@
     }
   }
 
+  function formatMockBody(body) {
+    const text = String(body || "");
+    if (!text.trim()) return "";
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch (_error) {
+      return text;
+    }
+  }
+
   function safeParseLooseJson(text, fallback = null) {
     const trimmed = String(text || "").trim();
     if (!trimmed) return fallback || {};
@@ -5460,6 +5498,7 @@
   }
 
   function getMockGroups(mocks = state.mocks) {
+    mocks = mocks.filter((mock) => mock.id !== state.pendingMockId);
     const groups = [];
     const byKey = new Map();
     mocks.forEach((mock) => {
@@ -5556,7 +5595,7 @@
       return [...state.requests];
     },
     getMocks() {
-      return [...state.mocks];
+      return state.mocks.filter((mock) => mock.id !== state.pendingMockId);
     }
   };
 
