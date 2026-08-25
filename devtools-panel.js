@@ -2822,7 +2822,7 @@
 
             <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
               <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Service Worker Interceptor</label>
-              <div style="font-size: 11px; color: ${isSwActive ? '#059669' : '#64748b'}; margin-top: 4px; display: flex; align-items: center; gap: 6px;">
+              <div style="font-size: 11px; color: ${isSwActive ? '#059669' : 1.0.218b'}; margin-top: 4px; display: flex; align-items: center; gap: 6px;">
                 <span class="sw-status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: ${isSwActive ? '#10b981' : '#94a3b8'}; display: inline-block;"></span>
                 <span>${isSwActive ? 'Active (Controlling native network requests)' : 'Inactive (Falling back to JS Fetch/XHR interceptor)'}</span>
               </div>
