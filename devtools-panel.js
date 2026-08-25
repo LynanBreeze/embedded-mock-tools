@@ -1101,6 +1101,7 @@
       });
 
       const textareaScrolls = {};
+      const textareaSizes = {};
       root.querySelectorAll("textarea").forEach((ta, idx) => {
         const id = ta.getAttribute("data-snapshot-field")
           ? `ta-snap-${ta.getAttribute("data-rule-idx") || ta.getAttribute("data-snapshot-rule-idx")}-${ta.getAttribute("data-step-idx") || ta.getAttribute("data-snapshot-step-idx")}-${ta.getAttribute("data-snapshot-field")}`
@@ -1108,6 +1109,10 @@
           ? `ta-mock-${ta.getAttribute("data-mock-id")}-${ta.getAttribute("data-mock-field")}`
           : `ta-idx-${idx}`;
         textareaScrolls[id] = ta.scrollTop;
+        textareaSizes[id] = {
+          height: ta.style.height,
+          width: ta.style.width
+        };
       });
 
       // Update Float Button
@@ -1191,6 +1196,9 @@
         if (textareaScrolls[id] !== undefined) {
           ta.scrollTop = textareaScrolls[id];
         }
+        const size = textareaSizes[id];
+        if (size?.height) ta.style.height = size.height;
+        if (size?.width) ta.style.width = size.width;
       });
 
       if (focusedSelector) {
@@ -2357,7 +2365,7 @@
     });
     root.querySelector("[data-reset-settings]")?.addEventListener("click", resetToInitialState);
 
-    root.querySelectorAll("[data-close-details-modal]").forEach((el) => {
+    root.querySelectorAll(".close-btn[data-close-details-modal]").forEach((el) => {
       el.addEventListener("click", () => {
         if (state.pendingMockId) {
           state.mocks = state.mocks.filter((mock) => mock.id !== state.pendingMockId);
