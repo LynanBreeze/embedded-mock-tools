@@ -28,7 +28,7 @@
     mocks: [],
     requestSort: "newest",
     requestSearch: "",
-    collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers"]),
+    collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers", "Mock Rule Request Body"]),
     floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: safeLocalStorageGet("embedded-devtools-mock-enabled") !== "false",
@@ -150,6 +150,7 @@
       enabled: mock.enabled !== false,
       method: (mock.method || "GET").toUpperCase(),
       pattern: mock.pattern || mock.url || "",
+      requestBody: typeof mock.requestBody === "string" ? mock.requestBody : "",
       status: Number(mock.status || 200),
       delay: Number(mock.delay || 0),
       headers: mock.headers || { "content-type": "application/json" },
@@ -545,7 +546,7 @@
       const request = createFetchRecord(input, initOptions);
       const snapshotMock = shouldLetServiceWorkerMock()
         ? null
-        : findSnapshotResponse(request.method, request.url);
+        : findSnapshotResponse(request.method, request.url, request.requestBody);
       addRequest(request);
 
       if (snapshotMock && !shouldLetServiceWorkerMock()) {
@@ -568,7 +569,7 @@
 
       const mock = shouldLetServiceWorkerMock()
         ? null
-        : findMock(request.method, request.url);
+        : findMock(request.method, request.url, request.requestBody);
       if (mock && !shouldLetServiceWorkerMock()) {
         await wait(mock.delay);
         const response = new Response(mock.body, {
@@ -692,7 +693,7 @@
         };
         const snapshotMock = shouldLetServiceWorkerMock()
           ? null
-          : findSnapshotResponse(meta.method, meta.url);
+          : findSnapshotResponse(meta.method, meta.url, meta.requestBody);
         addRequest(record);
 
         if (snapshotMock && !shouldLetServiceWorkerMock()) {
@@ -702,7 +703,7 @@
 
         const mock = shouldLetServiceWorkerMock()
           ? null
-          : findMock(meta.method, meta.url);
+          : findMock(meta.method, meta.url, meta.requestBody);
         if (mock && !shouldLetServiceWorkerMock()) {
           respondWithMockXhr(xhr, record.id, mock, meta.startTime);
           return undefined;
@@ -791,7 +792,7 @@
     notify();
   }
 
-  function findSnapshotResponse(method, url) {
+  function findSnapshotResponse(method, url, requestBody = "") {
     if (!state.activeSnapshotId) return null;
     const activeSnap = state.snapshots.find((s) => s.id === state.activeSnapshotId);
     if (!activeSnap) return null;
@@ -803,22 +804,32 @@
     }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0];
     if (!rule || !rule.responses || rule.responses.length === 0) return null;
 
-    if (state.playbackIndices[rule.id] === undefined) {
-      state.playbackIndices[rule.id] = 0;
+    const hasPayloadResponses = isPayloadMethod(method) && rule.responses.some((response) =>
+      Object.prototype.hasOwnProperty.call(response, "requestBody")
+    );
+    const payloadKey = snapshotPayloadKey(requestBody);
+    const responses = hasPayloadResponses
+      ? rule.responses.filter((response) => snapshotPayloadKey(response.requestBody) === payloadKey)
+      : rule.responses;
+    if (responses.length === 0) return null;
+
+    const playbackKey = `${rule.id}::${payloadKey}`;
+    if (state.playbackIndices[playbackKey] === undefined) {
+      state.playbackIndices[playbackKey] = 0;
     }
-    const idx = state.playbackIndices[rule.id];
+    const idx = state.playbackIndices[playbackKey];
     let response = null;
 
-    if (idx < rule.responses.length) {
-      response = rule.responses[idx];
-      state.playbackIndices[rule.id] = idx + 1;
+    if (idx < responses.length) {
+      response = responses[idx];
+      state.playbackIndices[playbackKey] = idx + 1;
     } else {
       const overflow = rule.overflow || "repeat-last";
       if (overflow === "repeat-last") {
-        response = rule.responses[rule.responses.length - 1];
+        response = responses[responses.length - 1];
       } else if (overflow === "loop") {
-        state.playbackIndices[rule.id] = 1;
-        response = rule.responses[0];
+        state.playbackIndices[playbackKey] = 1;
+        response = responses[0];
       } else {
         return null; // bypass to normal mocks or network
       }
@@ -835,13 +846,31 @@
     };
   }
 
-  function findMock(method, url) {
+  function isPayloadMethod(method) {
+    return ["POST", "PUT", "PATCH", "DELETE"].includes(String(method || "GET").toUpperCase());
+  }
+
+  function snapshotPayloadKey(body) {
+    const text = String(body || "").trim();
+    if (!text) return "";
+    try {
+      return JSON.stringify(JSON.parse(text));
+    } catch (_error) {
+      return text;
+    }
+  }
+
+  function findMock(method, url, requestBody = "") {
     if (!state.mockEnabled) return null;
     return getMatcherCandidates(state.mocks.filter((mock) => mock.id !== state.pendingMockId), mockMatcherCache, method).filter((mock) => {
       if (!mock.enabled) return false;
       const methodMatches = mock.method === "ALL" || mock.method === method.toUpperCase();
-      return methodMatches && patternMatches(mock.pattern, url);
-    }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0] || null;
+      const bodyMatches = !mock.requestBody || snapshotPayloadKey(mock.requestBody) === snapshotPayloadKey(requestBody);
+      return methodMatches && patternMatches(mock.pattern, url) && bodyMatches;
+    }).sort((a, b) => {
+      const bodySpecificity = Number(Boolean(b.requestBody)) - Number(Boolean(a.requestBody));
+      return bodySpecificity || String(b.pattern || "").length - String(a.pattern || "").length;
+    })[0] || null;
   }
 
   function shouldLetServiceWorkerMock() {
@@ -1401,6 +1430,7 @@
         }
         const rule = rulesMap.get(key);
         rule.responses.push({
+          requestBody: req.requestBody || "",
           status: Number(req.status || 200),
           delay: 200,
           headers: req.responseHeaders || { "content-type": "application/json" },
@@ -1636,10 +1666,10 @@
         const group = getMockGroups().find((item) => item.key === groupKey);
         if (!group) return;
 
-        const firstMockId = group.mocks[0]?.id;
+        const groupIds = new Set(group.mocks.map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
-          if (endpointKey(mock.method, mock.pattern) !== groupKey) return mock;
-          return { ...mock, enabled: event.target.checked && mock.id === firstMockId };
+          if (!groupIds.has(mock.id)) return mock;
+          return { ...mock, enabled: event.target.checked };
         });
         state.mocks = enforceSingleActivePerEndpoint(state.mocks);
         saveMocks();
@@ -1651,9 +1681,8 @@
         if (groupKey) {
           const group = getMockGroups().find((g) => g.key === groupKey);
           if (group) {
-            state.mocks = state.mocks.filter(
-              (mock) => !(mock.method === group.method && mock.pattern === group.pattern)
-            );
+            const groupIds = new Set(group.mocks.map((mock) => mock.id));
+            state.mocks = state.mocks.filter((mock) => !groupIds.has(mock.id));
             const hasSelected = group.mocks.some((m) => m.id === state.selectedMockId);
             if (hasSelected) {
               state.selectedMockId = null;
@@ -1887,9 +1916,9 @@
       select.addEventListener("change", (e) => {
         const groupKey = select.getAttribute("data-group-key");
         const newMethod = e.target.value.toUpperCase();
-        const [method, pattern] = groupKey.split("::");
+        const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
-          if (mock.method === method && mock.pattern === pattern) {
+          if (groupIds.has(mock.id)) {
             return { ...mock, method: newMethod };
           }
           return mock;
@@ -1903,9 +1932,9 @@
       input.addEventListener("change", (e) => {
         const groupKey = input.getAttribute("data-group-key");
         const newPattern = e.target.value;
-        const [method, pattern] = groupKey.split("::");
+        const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
-          if (mock.method === method && mock.pattern === pattern) {
+          if (groupIds.has(mock.id)) {
             return { ...mock, pattern: newPattern };
           }
           return mock;
@@ -1914,12 +1943,25 @@
       });
     });
 
+    root.querySelectorAll('[data-group-field="requestBody"]').forEach((input) => {
+      input.addEventListener("change", (e) => {
+        const groupKey = input.getAttribute("data-group-key");
+        const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
+        state.mocks = state.mocks.map((mock) => {
+          if (groupIds.has(mock.id)) return { ...mock, requestBody: e.target.value };
+          return mock;
+        });
+        state.mocks = enforceSingleActivePerEndpoint(state.mocks);
+        saveMocks();
+      });
+    });
+
     root.querySelectorAll('[data-group-field="group"]').forEach((input) => {
       const updateGroup = (value) => {
         const groupKey = input.getAttribute("data-group-key");
-        const [method, pattern] = groupKey.split("::");
+        const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
-          if (mock.method === method && mock.pattern === pattern) {
+          if (groupIds.has(mock.id)) {
             return { ...mock, group: value };
           }
           return mock;
@@ -1940,9 +1982,10 @@
     root.querySelectorAll('[data-group-field="aliasName"]').forEach((input) => {
       const updateAliasName = (value) => {
         const method = input.getAttribute("data-group-method");
-        const pattern = input.getAttribute("data-group-pattern");
+        const groupKey = input.getAttribute("data-group-key");
+        const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
-          if (mock.method === method && mock.pattern === pattern) {
+          if (groupIds.has(mock.id)) {
             return { ...mock, aliasName: value };
           }
           return mock;
@@ -2190,6 +2233,7 @@
         if (state.editingSnapshotDraft && state.editingSnapshotDraft.rules[ruleIdx]) {
           const lastResp = state.editingSnapshotDraft.rules[ruleIdx].responses[state.editingSnapshotDraft.rules[ruleIdx].responses.length - 1];
           state.editingSnapshotDraft.rules[ruleIdx].responses.push({
+            requestBody: lastResp ? lastResp.requestBody || "" : "",
             status: lastResp ? lastResp.status : 200,
             delay: lastResp ? lastResp.delay : 0,
             headers: lastResp ? JSON.parse(JSON.stringify(lastResp.headers)) : { "content-type": "application/json" },
@@ -2265,6 +2309,7 @@
           pattern: pattern,
           overflow: "repeat-last",
           responses: selectedReqs.map((req) => ({
+            requestBody: req.requestBody || "",
             status: Number(req.status || 200),
             delay: 200,
             headers: req.responseHeaders || { "content-type": "application/json" },
@@ -2493,7 +2538,12 @@
     const selectedKeys = new Set(state.selectedMockGroupKeys);
     if (!selectedKeys.size) return;
 
-    state.mocks = state.mocks.filter((mock) => !selectedKeys.has(endpointKey(mock.method, mock.pattern)));
+    const selectedMockIds = new Set(
+      getMockGroups()
+        .filter((group) => selectedKeys.has(group.key))
+        .flatMap((group) => group.mocks.map((mock) => mock.id))
+    );
+    state.mocks = state.mocks.filter((mock) => !selectedMockIds.has(mock.id));
     state.mocks = enforceSingleActivePerEndpoint(state.mocks);
     if (state.selectedMockId && !state.mocks.some((mock) => mock.id === state.selectedMockId)) {
       state.selectedMockId = null;
@@ -2669,6 +2719,7 @@
         enabled: false,
         method: source.method,
         pattern: source.pattern,
+        requestBody: source.requestBody || "",
         group: source.group,
         aliasName: source.aliasName,
         status: 200,
@@ -2708,13 +2759,15 @@
     if (!request) return;
     const pattern = mockPatternFromUrl(request.url);
     const requestMethod = String(request.method || "GET").toUpperCase();
-    const existingGroup = getMockGroups().find((group) => group.key === endpointKey(requestMethod, pattern));
+    const requestBody = request.requestBody || "";
+    const existingGroup = getMockGroups().find((group) => group.key === mockActivationKey({ method: requestMethod, pattern, requestBody }));
     const mock = normalizeMock(
       {
         name: "",
         enabled: true,
         method: requestMethod,
         pattern,
+        requestBody,
         aliasName: existingGroup?.aliasName || "",
         status: Number(request.status) || 200,
         delay: 0,
@@ -2846,14 +2899,15 @@
     if (state.activeRightTab === "mocks" && state.editingMockId) {
       const selectedGroup = state.mocks.find((m) => m.id === state.editingMockId);
       if (!selectedGroup) return "";
-      const groupKey = `${selectedGroup.method}::${selectedGroup.pattern}`;
+      const groupKey = mockActivationKey(selectedGroup);
       const group = {
         key: groupKey,
         method: selectedGroup.method,
         pattern: selectedGroup.pattern,
+        requestBody: selectedGroup.requestBody || "",
         group: selectedGroup.group || "",
         aliasName: selectedGroup.aliasName || "",
-        mocks: state.mocks.filter((mock) => mock.method === selectedGroup.method && mock.pattern === selectedGroup.pattern)
+        mocks: state.mocks.filter((mock) => mockActivationKey(mock) === groupKey)
       };
 
       return `
@@ -3164,7 +3218,7 @@
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
           <strong>${escapeHtml(group.aliasName || endpointLabel)}</strong>
-          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}</em>
+          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${group.requestBody ? ", body match" : ""}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
         <label class="toggle rule-toggle" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
@@ -3234,9 +3288,12 @@
     if (activeRule) {
       const stepsHtml = (activeRule.responses || []).map((resp, stepIdx) => {
         const stepNum = stepIdx + 1;
+        const showRequestBody = isPayloadMethod(activeRule.method) || Object.prototype.hasOwnProperty.call(resp, "requestBody");
         const headerTitle = `expanded-snapshot-headers-${activeRuleIdx}-${stepIdx}`;
+        const requestBodyTitle = `collapsed-snapshot-request-body-${activeRuleIdx}-${stepIdx}`;
         const bodyTitle = `collapsed-snapshot-body-${activeRuleIdx}-${stepIdx}`;
         const isHeadersCollapsed = !state.collapsedSections.has(headerTitle);
+        const isRequestBodyCollapsed = !state.collapsedSections.has(requestBodyTitle);
         const isBodyCollapsed = state.collapsedSections.has(bodyTitle);
 
         return `
@@ -3269,6 +3326,20 @@
                 </div>
               </div>
             </div>
+
+            ${showRequestBody ? `
+              <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${requestBodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
+                <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span>Request Body (match key)</span>
+                  </div>
+                </h3>
+                <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; min-height: 64px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.requestBody || "")}</textarea>
+              </div>
+            ` : ""}
             
             <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="${headerTitle}" style="margin-top: 4px; margin-bottom: 4px;">
               <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
@@ -3533,6 +3604,7 @@
   function endpointDetailTemplate(group) {
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
     const editorId = selected?.id || group.mocks[0]?.id || "";
+    const isRequestBodyCollapsed = state.collapsedSections.has("Mock Rule Request Body");
     return `
       <div class="endpoint-global-settings" style="border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
         <div style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;">
@@ -3541,9 +3613,20 @@
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
             </select>
           </label>
-          <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
-            <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
-          </label>
+        <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
+          <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
+        </label>
+        </div>
+        <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Rule Request Body" style="margin-bottom: 8px;">
+          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span>Request Body Match Key</span>
+            </div>
+          </h3>
+          <textarea rows="4" data-group-field="requestBody" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" placeholder="Leave empty to match any request body">${escapeHtml(group.requestBody || "")}</textarea>
         </div>
         <div style="display: flex; gap: 8px; align-items: flex-start;">
           <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
@@ -5459,7 +5542,7 @@
 
     const pattern = mockPatternFromUrl(request.url);
     const method = String(request.method || "GET").toUpperCase();
-    const currentMock = getMockGroups().find((group) => group.key === endpointKey(method, pattern))?.activeMock;
+    const currentMock = getMockGroups().find((group) => group.key === mockActivationKey({ method, pattern, requestBody: request.requestBody || "" }))?.activeMock;
     if (currentMock) {
       return { mocked: true, snapshotted: false, mockId: currentMock.id };
     }
@@ -5497,17 +5580,23 @@
     return `${String(method || "GET").toUpperCase()}::${String(pattern || "")}`;
   }
 
+  function mockActivationKey(mock) {
+    const bodyKey = mock.requestBody ? snapshotPayloadKey(mock.requestBody) : "*";
+    return `${endpointKey(mock.method, mock.pattern)}::${bodyKey}`;
+  }
+
   function getMockGroups(mocks = state.mocks) {
     mocks = mocks.filter((mock) => mock.id !== state.pendingMockId);
     const groups = [];
     const byKey = new Map();
     mocks.forEach((mock) => {
-      const key = endpointKey(mock.method, mock.pattern);
+      const key = mockActivationKey(mock);
       if (!byKey.has(key)) {
         const group = {
           key,
           method: mock.method,
           pattern: mock.pattern,
+          requestBody: mock.requestBody || "",
           mocks: [],
           activeMock: null,
           group: mock.group || "",
@@ -5524,14 +5613,24 @@
     return groups;
   }
 
+  function getMocksForGroupKey(groupKey) {
+    const group = getMockGroups().find((item) => item.key === groupKey);
+    if (group) return group.mocks;
+    if (state.pendingMockId) {
+      const pendingMock = state.mocks.find((mock) => mock.id === state.pendingMockId);
+      if (pendingMock && mockActivationKey(pendingMock) === groupKey) return [pendingMock];
+    }
+    return [];
+  }
+
   function getEndpointGroupForMock(mock) {
-    return getMockGroups().find((group) => group.key === endpointKey(mock.method, mock.pattern));
+    return getMockGroups().find((group) => group.key === mockActivationKey(mock));
   }
 
   function enforceSingleActivePerEndpoint(mocks) {
     const seenActive = new Set();
     return mocks.map((mock) => {
-      const key = endpointKey(mock.method, mock.pattern);
+      const key = mockActivationKey(mock);
       if (mock.enabled) {
         if (!seenActive.has(key)) {
           seenActive.add(key);
@@ -5549,10 +5648,10 @@
     if (!activeMock) return enforceSingleActivePerEndpoint(mocks);
 
     if (activeMock.enabled) {
-      const activeKey = endpointKey(activeMock.method, activeMock.pattern);
+      const activeKey = mockActivationKey(activeMock);
       const nextMocks = mocks.map((mock) => {
         if (mock.id === activeMockId) return mock;
-        if (endpointKey(mock.method, mock.pattern) === activeKey) {
+        if (mockActivationKey(mock) === activeKey) {
           return { ...mock, enabled: false };
         }
         return mock;

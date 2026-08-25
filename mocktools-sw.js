@@ -50,22 +50,25 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (stateInitialized) {
-    const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
-    const mock = findMock(event.request.method, event.request.url);
-    if (!snapshotMock && !mock) return;
-    event.respondWith(snapshotMock ? mockResponse(snapshotMock) : mockResponse(mock));
-    return;
-  }
-
-  event.respondWith((async () => {
-    await ensureState();
-    const snapshotMock = findSnapshotResponse(event.request.method, event.request.url);
-    const mock = findMock(event.request.method, event.request.url);
-    if (snapshotMock) return mockResponse(snapshotMock);
-    return mock ? mockResponse(mock) : fetch(event.request);
-  })());
+  event.respondWith(handleFetch(event.request));
 });
+
+async function handleFetch(request) {
+  if (!stateInitialized) await ensureState();
+  const requestBody = isPayloadMethod(request.method) ? await readRequestBody(request) : "";
+  const snapshotMock = findSnapshotResponse(request.method, request.url, requestBody);
+  const mock = findMock(request.method, request.url, requestBody);
+  if (snapshotMock) return mockResponse(snapshotMock);
+  return mock ? mockResponse(mock) : fetch(request);
+}
+
+async function readRequestBody(request) {
+  try {
+    return await request.clone().text();
+  } catch (_error) {
+    return "";
+  }
+}
 
 function ensureState() {
   if (stateInitialized) return Promise.resolve();
@@ -137,7 +140,7 @@ async function mockResponse(mock) {
   });
 }
 
-function findSnapshotResponse(method, url) {
+function findSnapshotResponse(method, url, requestBody = "") {
   if (!activeSnapshotRules || activeSnapshotRules.length === 0) return null;
   const rule = getRuleCandidates(snapshotRulesByMethod, method).filter((r) => {
     const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
@@ -145,22 +148,32 @@ function findSnapshotResponse(method, url) {
   }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0];
   if (!rule || !rule.responses || rule.responses.length === 0) return null;
 
-  if (playbackIndices[rule.id] === undefined) {
-    playbackIndices[rule.id] = 0;
+  const hasPayloadResponses = isPayloadMethod(method) && rule.responses.some((response) =>
+    Object.prototype.hasOwnProperty.call(response, "requestBody")
+  );
+  const payloadKey = snapshotPayloadKey(requestBody);
+  const responses = hasPayloadResponses
+    ? rule.responses.filter((response) => snapshotPayloadKey(response.requestBody) === payloadKey)
+    : rule.responses;
+  if (responses.length === 0) return null;
+
+  const playbackKey = `${rule.id}::${payloadKey}`;
+  if (playbackIndices[playbackKey] === undefined) {
+    playbackIndices[playbackKey] = 0;
   }
-  const idx = playbackIndices[rule.id];
+  const idx = playbackIndices[playbackKey];
   let response = null;
 
-  if (idx < rule.responses.length) {
-    response = rule.responses[idx];
-    playbackIndices[rule.id] = idx + 1;
+  if (idx < responses.length) {
+    response = responses[idx];
+    playbackIndices[playbackKey] = idx + 1;
   } else {
     const overflow = rule.overflow || "repeat-last";
     if (overflow === "repeat-last") {
-      response = rule.responses[rule.responses.length - 1];
+      response = responses[responses.length - 1];
     } else if (overflow === "loop") {
-      playbackIndices[rule.id] = 1;
-      response = rule.responses[0];
+      playbackIndices[playbackKey] = 1;
+      response = responses[0];
     } else {
       return null;
     }
@@ -176,12 +189,30 @@ function findSnapshotResponse(method, url) {
   };
 }
 
-function findMock(method, url) {
+function isPayloadMethod(method) {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(String(method || "GET").toUpperCase());
+}
+
+function snapshotPayloadKey(body) {
+  const text = String(body || "").trim();
+  if (!text) return "";
+  try {
+    return JSON.stringify(JSON.parse(text));
+  } catch (_error) {
+    return text;
+  }
+}
+
+function findMock(method, url, requestBody = "") {
   return getRuleCandidates(mockRulesByMethod, method).filter((mock) => {
     if (!mock.enabled) return false;
     const methodMatches = mock.method === "ALL" || mock.method === String(method || "GET").toUpperCase();
-    return methodMatches && patternMatches(mock.pattern, url);
-  }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0] || null;
+    const bodyMatches = !mock.requestBody || snapshotPayloadKey(mock.requestBody) === snapshotPayloadKey(requestBody);
+    return methodMatches && patternMatches(mock.pattern, url) && bodyMatches;
+  }).sort((a, b) => {
+    const bodySpecificity = Number(Boolean(b.requestBody)) - Number(Boolean(a.requestBody));
+    return bodySpecificity || String(b.pattern || "").length - String(a.pattern || "").length;
+  })[0] || null;
 }
 
 function patternMatches(pattern, url) {
