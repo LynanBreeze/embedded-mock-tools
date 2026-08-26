@@ -2496,11 +2496,21 @@
 
   function saveMockFromForm(root, id) {
     const activeEl = root.getRootNode()?.activeElement || document.activeElement;
+    const currentMock = state.mocks.find((mock) => mock.id === id);
+    if (!currentMock) return;
+
+    // Method and pattern are edited in the endpoint header, outside the mock
+    // card. Read them from the DOM as well so saving a newly-created rule
+    // preserves the value selected immediately before clicking Save.
+    const getGroupField = (field) => root.querySelector(
+      `[data-group-field="${field}"][data-group-editor-id="${cssEscape(id)}"]`
+    );
+    const methodField = getGroupField("method");
+    const patternField = getGroupField("pattern");
     if (activeEl && typeof activeEl.blur === "function") {
       activeEl.blur();
     }
     const card = root.querySelector(`[data-mock-card="${cssEscape(id)}"]`);
-    const currentMock = state.mocks.find((mock) => mock.id === id);
     if (!card || !currentMock) return;
     const getField = (field) => card.querySelector(`[data-mock-field="${field}"]`);
     const headers = safeJsonParse(getField("headers")?.value, currentMock.headers);
@@ -2508,8 +2518,8 @@
     const patch = {
       name: getField("name")?.value || "",
       enabled: wantsActive,
-      method: getField("method") ? getField("method").value.toUpperCase() : currentMock.method,
-      pattern: getField("pattern") ? getField("pattern").value : currentMock.pattern,
+      method: methodField ? methodField.value.toUpperCase() : currentMock.method,
+      pattern: patternField ? patternField.value : currentMock.pattern,
       status: Number(getField("status")?.value || 200),
       delay: Number(getField("delay")?.value || 0),
       headers,
