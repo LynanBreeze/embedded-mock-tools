@@ -17,6 +17,7 @@ const STORE_NAME = "settings";
 const MOCKS_RECORD_KEY = "mocks";
 const SNAPSHOTS_RECORD_KEY = "snapshots";
 const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
+const MOCK_ENABLED_KEY = "mock_enabled";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -50,7 +51,49 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  event.respondWith(handleFetch(event.request));
+  if (!stateInitialized) {
+    event.respondWith(handleFetch(event.request));
+    return;
+  }
+
+  const method = event.request.method;
+  const url = event.request.url;
+
+  const candidateMockRules = getRuleCandidates(mockRulesByMethod, method).filter((mock) => {
+    if (!mock.enabled) return false;
+    const methodMatches = mock.method === "ALL" || mock.method === String(method || "GET").toUpperCase();
+    return methodMatches && patternMatches(mock.pattern, url);
+  });
+
+  const candidateSnapshotRules = (!activeSnapshotRules || activeSnapshotRules.length === 0)
+    ? []
+    : getRuleCandidates(snapshotRulesByMethod, method).filter((rule) => {
+        const methodMatches = rule.method === "ALL" || rule.method === String(method || "GET").toUpperCase();
+        return methodMatches && patternMatches(rule.pattern, url);
+      });
+
+  if (candidateMockRules.length === 0 && candidateSnapshotRules.length === 0) {
+    return;
+  }
+
+  const hasPayloadMock = isPayloadMethod(method) && candidateMockRules.some((mock) => Boolean(mock.requestBody));
+  const hasPayloadSnapshot = isPayloadMethod(method) && candidateSnapshotRules.some((rule) =>
+    Array.isArray(rule.responses) && rule.responses.some((response) => Object.prototype.hasOwnProperty.call(response, "requestBody"))
+  );
+
+  if (hasPayloadMock || hasPayloadSnapshot) {
+    event.respondWith(handleFetch(event.request));
+    return;
+  }
+
+  const snapshotMock = findSnapshotResponse(method, url, "");
+  const mock = findMock(method, url, "");
+
+  if (snapshotMock) {
+    event.respondWith(mockResponse(snapshotMock));
+  } else if (mock) {
+    event.respondWith(mockResponse(mock));
+  }
 });
 
 async function handleFetch(request) {
@@ -90,18 +133,19 @@ async function loadStateFromIndexedDb() {
     const requests = [
       store.get(MOCKS_RECORD_KEY),
       store.get(SNAPSHOTS_RECORD_KEY),
-      store.get(ACTIVE_SNAPSHOT_ID_KEY)
+      store.get(ACTIVE_SNAPSHOT_ID_KEY),
+      store.get(MOCK_ENABLED_KEY)
     ];
     transaction.oncomplete = () => resolve(requests.map((request) => request.result?.value));
     transaction.onerror = () => reject(transaction.error || new Error("IndexedDB read failed"));
   });
   db.close();
 
-  const [persistedMocks, snapshots, activeSnapshotId] = values;
+  const [persistedMocks, snapshots, activeSnapshotId, mockEnabled] = values;
   // A live page may have pushed newer rules while this read was in flight.
   // Never let the older persisted snapshot overwrite those in-memory rules.
   if (loadRevision !== stateRevision) return;
-  mocks = Array.isArray(persistedMocks) ? persistedMocks : [];
+  mocks = (mockEnabled !== false && Array.isArray(persistedMocks)) ? persistedMocks : [];
   mockRulesByMethod = buildRuleIndex(mocks);
   const activeSnapshot = Array.isArray(snapshots)
     ? snapshots.find((snapshot) => snapshot.id === activeSnapshotId)
@@ -270,3 +314,5 @@ function getRuleCandidates(index, method) {
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
+
+ensureState();

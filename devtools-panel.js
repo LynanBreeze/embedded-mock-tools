@@ -8,6 +8,7 @@
   const MOCKS_RECORD_KEY = "mocks";
   const SNAPSHOTS_RECORD_KEY = "snapshots";
   const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
+  const MOCK_ENABLED_KEY = "mock_enabled";
   const MAX_REQUESTS = 200;
   const MAX_RESPONSE_BODY_BYTES = 256 * 1024;
   const SERVICE_WORKER_SCRIPT_NAME = "mocktools-sw.js";
@@ -113,6 +114,9 @@
   }
 
   async function hydrateMocks(seedMocks) {
+    const persistedMockEnabled = await readPersistedMockEnabled();
+    state.mockEnabled = persistedMockEnabled;
+
     const persistedMocks = await readPersistedMocks();
     const mocks = persistedMocks !== null ? persistedMocks : normalizeMocks(seedMocks);
     state.mocks = enforceSingleActivePerEndpoint(mocks);
@@ -132,6 +136,7 @@
 
     state.persistenceReady = true;
     if (state.mocks.length) persistMocks(state.mocks);
+    persistMockEnabled(state.mockEnabled);
     syncServiceWorkerMocks();
     syncServiceWorkerSnapshot();
     notify();
@@ -162,6 +167,7 @@
   function saveMocks(mocks = state.mocks, options = {}) {
     const committedMocks = mocks.filter((mock) => mock.id !== state.pendingMockId);
     persistMocks(committedMocks);
+    persistMockEnabled(state.mockEnabled);
     syncServiceWorkerMocks();
     if (!options.silent) notify();
   }
@@ -436,6 +442,27 @@
         }
       } catch (_fallbackError) {}
     }
+  }
+
+  async function readPersistedMockEnabled() {
+    try {
+      const record = await readFromIndexedDb(MOCK_ENABLED_KEY);
+      if (record && typeof record.value === "boolean") return record.value;
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+    }
+    const local = safeLocalStorageGet("embedded-devtools-mock-enabled");
+    if (local !== null) return local !== "false";
+    return true;
+  }
+
+  async function persistMockEnabled(enabled) {
+    try {
+      await writeToIndexedDb(MOCK_ENABLED_KEY, Boolean(enabled));
+    } catch (error) {
+      state.persistenceError = error.message || "IndexedDB unavailable";
+    }
+    safeLocalStorageSet("embedded-devtools-mock-enabled", String(Boolean(enabled)));
   }
 
   function safeLocalStorageGet(key) {
