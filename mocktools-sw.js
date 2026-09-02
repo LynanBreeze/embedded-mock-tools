@@ -76,9 +76,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const hasPayloadMock = isPayloadMethod(method) && candidateMockRules.some((mock) => Boolean(mock.requestBody));
+  const hasPayloadMock = isPayloadMethod(method) && candidateMockRules.some((mock) => Boolean(snapshotPayloadKey(mock.requestBody)));
   const hasPayloadSnapshot = isPayloadMethod(method) && candidateSnapshotRules.some((rule) =>
-    Array.isArray(rule.responses) && rule.responses.some((response) => Object.prototype.hasOwnProperty.call(response, "requestBody"))
+    Array.isArray(rule.responses) && rule.responses.some((response) => Boolean(snapshotPayloadKey(response.requestBody)))
   );
 
   if (hasPayloadMock || hasPayloadSnapshot) {
@@ -186,45 +186,81 @@ async function mockResponse(mock) {
 
 function findSnapshotResponse(method, url, requestBody = "") {
   if (!activeSnapshotRules || activeSnapshotRules.length === 0) return null;
-  const rule = getRuleCandidates(snapshotRulesByMethod, method).filter((r) => {
+  const matchingRules = getRuleCandidates(snapshotRulesByMethod, method).filter((r) => {
     const methodMatches = r.method === "ALL" || r.method === String(method || "GET").toUpperCase();
-    return methodMatches && patternMatches(r.pattern, url);
-  }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length)[0];
-  if (!rule || !rule.responses || rule.responses.length === 0) return null;
+    return methodMatches && patternMatches(r.pattern, url) && Array.isArray(r.responses) && r.responses.length > 0;
+  }).sort((a, b) => String(b.pattern || "").length - String(a.pattern || "").length);
 
-  const hasPayloadResponses = isPayloadMethod(method) && rule.responses.some((response) =>
-    Object.prototype.hasOwnProperty.call(response, "requestBody")
-  );
+  if (matchingRules.length === 0) return null;
+
   const payloadKey = snapshotPayloadKey(requestBody);
-  const responses = hasPayloadResponses
-    ? rule.responses.filter((response) => snapshotPayloadKey(response.requestBody) === payloadKey)
-    : rule.responses;
-  if (responses.length === 0) return null;
+  let selectedRule = null;
+  let selectedResponses = [];
+  let isFallback = false;
 
-  const playbackKey = `${rule.id}::${payloadKey}`;
+  // 1. Priority: match rules/steps with exact payload
+  if (payloadKey && isPayloadMethod(method)) {
+    for (const rule of matchingRules) {
+      const matched = rule.responses.filter((response) => snapshotPayloadKey(response.requestBody) === payloadKey);
+      if (matched.length > 0) {
+        selectedRule = rule;
+        selectedResponses = matched;
+        isFallback = false;
+        break;
+      }
+    }
+  }
+
+  // 2. Fallback: match rules/steps with empty payload (catch-all)
+  if (!selectedRule) {
+    for (const rule of matchingRules) {
+      const hasPayloadResponses = isPayloadMethod(method) && rule.responses.some((response) =>
+        Boolean(snapshotPayloadKey(response.requestBody))
+      );
+      if (hasPayloadResponses) {
+        const fallbackSteps = rule.responses.filter((response) => !snapshotPayloadKey(response.requestBody));
+        if (fallbackSteps.length > 0) {
+          selectedRule = rule;
+          selectedResponses = fallbackSteps;
+          isFallback = true;
+          break;
+        }
+      } else {
+        selectedRule = rule;
+        selectedResponses = rule.responses;
+        isFallback = false;
+        break;
+      }
+    }
+  }
+
+  if (!selectedRule || selectedResponses.length === 0) return null;
+
+  const effectivePayloadKey = !isFallback && payloadKey ? payloadKey : "";
+  const playbackKey = `${selectedRule.id}::${effectivePayloadKey}`;
   if (playbackIndices[playbackKey] === undefined) {
     playbackIndices[playbackKey] = 0;
   }
   const idx = playbackIndices[playbackKey];
   let response = null;
 
-  if (idx < responses.length) {
-    response = responses[idx];
+  if (idx < selectedResponses.length) {
+    response = selectedResponses[idx];
     playbackIndices[playbackKey] = idx + 1;
   } else {
-    const overflow = rule.overflow || "repeat-last";
+    const overflow = selectedRule.overflow || "repeat-last";
     if (overflow === "repeat-last") {
-      response = responses[responses.length - 1];
+      response = selectedResponses[selectedResponses.length - 1];
     } else if (overflow === "loop") {
       playbackIndices[playbackKey] = 1;
-      response = responses[0];
+      response = selectedResponses[0];
     } else {
       return null;
     }
   }
 
   return {
-    id: rule.id,
+    id: selectedRule.id,
     status: response.status,
     delay: response.delay,
     headers: response.headers,
@@ -237,24 +273,44 @@ function isPayloadMethod(method) {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(String(method || "GET").toUpperCase());
 }
 
-function snapshotPayloadKey(body) {
-  const text = String(body || "").trim();
+function canonicalizeJson(value) {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  const sorted = {};
+  Object.keys(value).sort().forEach((key) => {
+    sorted[key] = canonicalizeJson(value[key]);
+  });
+  return sorted;
+}
+
+function normalizePayloadKey(body) {
+  if (body === null || body === undefined) return "";
+  if (typeof body === "object") {
+    try {
+      return JSON.stringify(canonicalizeJson(body));
+    } catch (_error) {
+      return "";
+    }
+  }
+  const text = String(body).trim();
   if (!text) return "";
   try {
-    return JSON.stringify(JSON.parse(text));
+    return JSON.stringify(canonicalizeJson(JSON.parse(text)));
   } catch (_error) {
     return text;
   }
 }
 
+const snapshotPayloadKey = normalizePayloadKey;
+
 function findMock(method, url, requestBody = "") {
   return getRuleCandidates(mockRulesByMethod, method).filter((mock) => {
     if (!mock.enabled) return false;
     const methodMatches = mock.method === "ALL" || mock.method === String(method || "GET").toUpperCase();
-    const bodyMatches = !mock.requestBody || snapshotPayloadKey(mock.requestBody) === snapshotPayloadKey(requestBody);
+    const bodyMatches = !normalizePayloadKey(mock.requestBody) || normalizePayloadKey(mock.requestBody) === normalizePayloadKey(requestBody);
     return methodMatches && patternMatches(mock.pattern, url) && bodyMatches;
   }).sort((a, b) => {
-    const bodySpecificity = Number(Boolean(b.requestBody)) - Number(Boolean(a.requestBody));
+    const bodySpecificity = Number(Boolean(normalizePayloadKey(b.requestBody))) - Number(Boolean(normalizePayloadKey(a.requestBody)));
     return bodySpecificity || String(b.pattern || "").length - String(a.pattern || "").length;
   })[0] || null;
 }
