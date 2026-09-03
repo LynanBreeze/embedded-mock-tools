@@ -3115,13 +3115,13 @@
             </div>
           </div>
           <nav>
-            <button type="button" data-enter-snapshot-mode class="icon-btn${state.snapshotSelectionMode ? " active" : ""}" title="Capture requests as Snapshot">
+            <button type="button" data-enter-snapshot-mode class="icon-btn${state.snapshotSelectionMode ? " active" : ""}" data-tooltip="Capture requests as Snapshot" aria-label="Capture requests as Snapshot">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
                 <circle cx="12" cy="13" r="4"></circle>
               </svg>
             </button>
-            <button type="button" data-clear class="icon-btn" title="Clear requests">
+            <button type="button" data-clear class="icon-btn" data-tooltip="Clear requests" aria-label="Clear requests">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M19 5L12 12"></path>
                 <path d="M12 12L7 14l-4 6a1 1 0 0 0 1 1.5h8a1 1 0 0 0 1-1.2l-2-4.3z"></path>
@@ -3130,13 +3130,13 @@
                 <path d="M11 14.5l0.5 5.5"></path>
               </svg>
             </button>
-            <button type="button" data-open-settings class="icon-btn" title="Open Settings">
+            <button type="button" data-open-settings class="icon-btn" data-tooltip="Open Settings" aria-label="Open Settings">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
             </button>
-            <button type="button" data-close class="icon-btn close-btn" title="Collapse panel">
+            <button type="button" data-close class="icon-btn close-btn" data-tooltip="Collapse panel" aria-label="Collapse panel">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
@@ -3206,10 +3206,10 @@
                         <button type="button" data-cancel-mock-selection class="inline-style-c2a44570">Cancel</button>
                       </div>
                     ` : `
-                      <button type="button" class="action-select-btn icon-btn" data-start-mock-selection title="Batch select mock rules" aria-label="Batch select mock rules" ${filteredGroups.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
-                      <button type="button" class="action-add-btn icon-btn" data-add-mock title="Add new mock rule" aria-label="Add new mock rule"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></button>
-                      <button type="button" class="action-import-btn icon-btn" data-import-mocks title="Import mock backup file" aria-label="Import mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                      <button type="button" class="action-export-btn icon-btn" data-export-mocks title="Export mock backup file" aria-label="Export mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+                      <button type="button" class="action-select-btn icon-btn" data-start-mock-selection data-tooltip="Batch select mock rules" aria-label="Batch select mock rules" ${filteredGroups.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+                      <button type="button" class="action-add-btn icon-btn" data-add-mock data-tooltip="Add new mock rule" aria-label="Add new mock rule"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></button>
+                      <button type="button" class="action-import-btn icon-btn" data-import-mocks data-tooltip="Import mock backup file" aria-label="Import mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                      <button type="button" class="action-export-btn icon-btn" data-export-mocks data-tooltip="Export mock backup file" aria-label="Export mock backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
                     `}
                   </div>
                 </div>
@@ -3250,9 +3250,9 @@
                         <button type="button" data-cancel-snapshot-selection class="inline-style-c2a44570">Cancel</button>
                       </div>
                     ` : `
-                      <button type="button" class="action-select-btn icon-btn" data-start-snapshot-selection title="Batch select snapshots" aria-label="Batch select snapshots" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
-                      <button type="button" class="action-import-btn icon-btn" data-import-snapshots title="Import snapshot backup file" aria-label="Import snapshot backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                      <button type="button" class="action-export-btn icon-btn" data-export-snapshots title="Export snapshot backup file" aria-label="Export snapshot backup file" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+                      <button type="button" class="action-select-btn icon-btn" data-start-snapshot-selection data-tooltip="Batch select snapshots" aria-label="Batch select snapshots" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
+                      <button type="button" class="action-import-btn icon-btn" data-import-snapshots data-tooltip="Import snapshot backup file" aria-label="Import snapshot backup file"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                      <button type="button" class="action-export-btn icon-btn" data-export-snapshots data-tooltip="Export snapshot backup file" aria-label="Export snapshot backup file" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
                     `}
                   </div>
                 </div>
@@ -4163,6 +4163,89 @@
         width: 14px;
         height: 14px;
       }
+      .icon-btn[data-tooltip] {
+        position: relative;
+      }
+      .icon-btn[data-tooltip]::after {
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 4px;
+        bottom: calc(100% + 8px);
+        color: #f8fafc;
+        content: attr(data-tooltip);
+        font-size: 10px;
+        font-weight: 600;
+        left: 50%;
+        line-height: 1.3;
+        max-width: 220px;
+        opacity: 0;
+        padding: 5px 8px;
+        pointer-events: none;
+        position: absolute;
+        text-align: center;
+        transform: translate(-50%, 4px);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+        visibility: hidden;
+        white-space: nowrap;
+        width: max-content;
+        z-index: 20;
+      }
+      .icon-btn[data-tooltip]:hover::after,
+      .icon-btn[data-tooltip]:focus-visible::after {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        visibility: visible;
+      }
+      .mock-head-actions .icon-btn[data-tooltip]::after {
+        bottom: auto;
+        top: calc(100% + 8px);
+        transform: translate(-50%, -4px);
+      }
+      .mock-head-actions .icon-btn[data-tooltip]:hover::after,
+      .mock-head-actions .icon-btn[data-tooltip]:focus-visible::after {
+        transform: translate(-50%, 0);
+      }
+      .mock-head-actions .icon-btn:nth-last-child(-n + 2)[data-tooltip]::after {
+        left: auto;
+        right: 0;
+        transform: translateY(-4px);
+      }
+      .mock-head-actions .icon-btn:nth-last-child(-n + 2)[data-tooltip]:hover::after,
+      .mock-head-actions .icon-btn:nth-last-child(-n + 2)[data-tooltip]:focus-visible::after {
+        transform: translateY(0);
+      }
+      .mock-head-actions .icon-btn:nth-last-child(2)[data-tooltip]::after {
+        right: -28px;
+      }
+      .topbar {
+        position: relative;
+        z-index: 3;
+      }
+      .topbar nav .icon-btn[data-tooltip]::after {
+        bottom: auto;
+        top: calc(100% + 8px);
+        transform: translate(-50%, -4px);
+      }
+      .topbar nav .icon-btn[data-tooltip]:hover::after,
+      .topbar nav .icon-btn[data-tooltip]:focus-visible::after {
+        transform: translate(-50%, 0);
+      }
+      .topbar nav .icon-btn:nth-last-child(-n + 2)[data-tooltip]::after {
+        left: auto;
+        right: 0;
+        transform: translateY(-4px);
+      }
+      .topbar nav .icon-btn:nth-last-child(-n + 2)[data-tooltip]:hover::after,
+      .topbar nav .icon-btn:nth-last-child(-n + 2)[data-tooltip]:focus-visible::after {
+        transform: translateY(0);
+      }
+      .topbar nav .icon-btn:nth-last-child(2)[data-tooltip]::after {
+        right: -28px;
+      }
+      .mock-head-actions {
+        position: relative;
+        z-index: 2;
+      }
       .icon-btn:hover:not(:disabled) {
         background: #e2e8f0;
         border-color: #94a3b8;
@@ -4578,24 +4661,24 @@
         opacity: .45;
       }
       .mock-head-actions .action-select-btn:hover:not(:disabled) {
-        background: #eff6ff;
-        border-color: #93c5fd;
-        color: #1d4ed8;
+        background: #29476f;
+        border-color: #60a5fa;
+        color: #bfdbfe;
       }
       .mock-head-actions .action-add-btn:hover:not(:disabled) {
-        background: #f0fdf4;
-        border-color: #86efac;
-        color: #16a34a;
+        background: #214f40;
+        border-color: #34d399;
+        color: #a7f3d0;
       }
       .mock-head-actions .action-import-btn:hover:not(:disabled) {
-        background: #fffbeb;
-        border-color: #fcd34d;
-        color: #d97706;
+        background: #58451f;
+        border-color: #fbbf24;
+        color: #fde68a;
       }
       .mock-head-actions .action-export-btn:hover:not(:disabled) {
-        background: #f5f3ff;
-        border-color: #c4b5fd;
-        color: #7c3aed;
+        background: #46366d;
+        border-color: #a78bfa;
+        color: #ddd6fe;
       }
       .mock-head-actions .selection-cancel-btn {
         background: #f8fafc;
