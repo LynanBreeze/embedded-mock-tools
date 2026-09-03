@@ -5508,6 +5508,7 @@
       .snapshot-rule-nav-item.active { border-color: #93c5fd; background: #eff6ff; }
       .snapshot-rule-nav-item > span:not(.method-badge) { color: #334155; }
       .snapshot-rule-nav-item.active > span:not(.method-badge) { color: #1e40af; }
+      .request-filter .search-input.inline-style-88bc4114 { flex: 0 0 54px; width: 54px; }
       .context-menu[data-left][data-top] { left: attr(data-left type(<length>)); top: attr(data-top type(<length>)); }
 
     `;
