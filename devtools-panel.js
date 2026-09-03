@@ -2899,35 +2899,35 @@
     );
     
     return `
-      <div class="modal-overlay" data-close-settings-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-        <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 440px; max-width: 90%; overflow: hidden;">
-          <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0;">
-            <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Settings</h3>
-            <button type="button" class="close-btn" data-close-settings-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+      <div class="modal-overlay inline-style-52ecd228" data-close-settings-modal>
+        <div class="modal-card inline-style-57e41c3b" onclick="event.stopPropagation();">
+          <div class="modal-header inline-style-7ebc7e67">
+            <h3 class="inline-style-a57ba1a3">Settings</h3>
+            <button type="button" class="close-btn inline-style-df603a6e" data-close-settings-modal>&times;</button>
           </div>
-          <div class="modal-body" style="padding: 16px; font-size: 12px; color: #334155;">
+          <div class="modal-body inline-style-fe5ec6f6">
             <div class="settings-group">
-              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">IndexedDB Storage</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+              <label class="inline-style-3af47968">IndexedDB Storage</label>
+              <div class="inline-style-ee32b08f">
                 ${spaceText}
               </div>
             </div>
 
-            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
-              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Service Worker Interceptor</label>
-              <div style="font-size: 11px; color: ${isSwActive ? '#059669' : '#64748b'}; margin-top: 4px; display: flex; align-items: center; gap: 6px;">
-                <span class="sw-status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: ${isSwActive ? '#10b981' : '#94a3b8'}; display: inline-block;"></span>
+            <div class="settings-group inline-style-5f6b5dd6">
+              <label class="inline-style-3af47968">Service Worker Interceptor</label>
+              <div class="sw-status-text ${isSwActive ? "active" : "inactive"}">
+                <span class="sw-status-dot ${isSwActive ? "active" : "inactive"}"></span>
                 <span>${isSwActive ? 'Active (Controlling native network requests)' : 'Inactive (Falling back to JS Fetch/XHR interceptor)'}</span>
               </div>
             </div>
 
-            <div class="settings-group" style="margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px;">
-              <label style="display: block; font-weight: 600; color: #475569; margin-bottom: 4px;">Version</label>
-              <div style="font-size: 11px; color: #64748b; margin-top: 4px;">1.0.25</div>
+            <div class="settings-group inline-style-5f6b5dd6">
+              <label class="inline-style-3af47968">Version</label>
+              <div class="inline-style-ee32b08f">1.0.25</div>
             </div>
           </div>
-          <div class="modal-footer" style="padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end;">
-            <button type="button" class="secondary-btn reset-btn" data-reset-settings style="margin-right: auto;">Reset</button>
+          <div class="modal-footer inline-style-4de12c33">
+            <button type="button" class="secondary-btn reset-btn inline-style-1c132269" data-reset-settings>Reset</button>
             <button type="button" class="secondary-btn" data-close-settings-modal>Done</button>
           </div>
         </div>
@@ -3012,13 +3012,13 @@
       };
 
       return `
-        <div class="modal-overlay" data-close-details-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 680px; max-width: 90vw; max-height: 85vh; overflow: hidden;">
-            <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
-              <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Edit Mock Rule</h3>
-              <button type="button" class="close-btn" data-close-details-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+        <div class="modal-overlay inline-style-19113f9d" data-close-details-modal>
+          <div class="modal-card inline-style-d7a3860a" onclick="event.stopPropagation();">
+            <div class="modal-header inline-style-801856b0">
+              <h3 class="inline-style-a57ba1a3">Edit Mock Rule</h3>
+              <button type="button" class="close-btn inline-style-df603a6e" data-close-details-modal>&times;</button>
             </div>
-            <div class="modal-body" style="padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0;">
+            <div class="modal-body inline-style-e191b109">
               ${endpointDetailTemplate(group)}
             </div>
           </div>
@@ -3029,13 +3029,13 @@
     // For Snapshot details
     if (state.activeRightTab === "snapshots" && state.editingSnapshotId) {
       return `
-        <div class="modal-overlay" data-close-details-modal style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
-          <div class="modal-card" onclick="event.stopPropagation();" style="background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 860px; max-width: 95vw; height: 80vh; max-height: 85vh; overflow: hidden;">
-            <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;">
-              <h3 style="margin: 0; font-size: 14px; color: #1e293b; font-weight: 700;">Edit Snapshot Rules</h3>
-              <button type="button" class="close-btn" data-close-details-modal style="background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">&times;</button>
+        <div class="modal-overlay inline-style-19113f9d" data-close-details-modal>
+          <div class="modal-card inline-style-69e3fe06" onclick="event.stopPropagation();">
+            <div class="modal-header inline-style-801856b0">
+              <h3 class="inline-style-a57ba1a3">Edit Snapshot Rules</h3>
+              <button type="button" class="close-btn inline-style-df603a6e" data-close-details-modal>&times;</button>
             </div>
-            <div class="modal-body" style="padding: 0; overflow: hidden; flex-grow: 1; min-height: 0; display: flex; flex-direction: row; height: 100%;">
+            <div class="modal-body inline-style-086293cc">
               ${snapshotDetailTemplate()}
             </div>
           </div>
@@ -3146,21 +3146,21 @@
         <div class="grid">
           <aside class="request-list">
             ${state.snapshotSelectionMode ? `
-              <div class="request-filter selection-toolbar" style="gap: 8px; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom-color: #bae6fd;">
-                <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotRequestIds.size}</span>
-                <div style="display: flex; gap: 4px;">
-                  <button type="button" class="mini-btn" data-snapshot-select-all style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">All</button>
-                  <button type="button" class="mini-btn" data-snapshot-deselect-all style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">None</button>
+              <div class="request-filter selection-toolbar inline-style-c1762fa9">
+                <span class="inline-style-4977d7aa">Selected: ${state.selectedSnapshotRequestIds.size}</span>
+                <div class="inline-style-d2f87c7f">
+                  <button type="button" class="mini-btn inline-style-b69973d9" data-snapshot-select-all>All</button>
+                  <button type="button" class="mini-btn inline-style-32b56291" data-snapshot-deselect-all>None</button>
                 </div>
-                <div style="display: flex; gap: 6px; margin-left: auto;">
-                  <button type="button" data-save-snapshot-confirm style="background: #10b981; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Save</button>
-                  <button type="button" data-save-snapshot-cancel style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
+                <div class="inline-style-4b3bf9f6">
+                  <button type="button" data-save-snapshot-confirm class="inline-style-f16d22c3">Save</button>
+                  <button type="button" data-save-snapshot-cancel class="inline-style-c2a44570">Cancel</button>
                 </div>
               </div>
             ` : `
               <div class="request-filter">
                 <input type="text" placeholder="Filter URL..." class="search-input" data-search-input value="${escapeAttr(state.requestSearch)}" />
-                <input type="text" placeholder="Status" class="search-input" data-status-filter value="${escapeAttr(state.requestSearchStatus)}" style="flex: 0 0 54px; width: 54px; text-align: center; padding: 0 4px;" />
+                <input type="text" placeholder="Status" class="search-input inline-style-88bc4114" data-status-filter value="${escapeAttr(state.requestSearchStatus)}" />
                 <select class="sort-select" data-sort-select>
                   <option value="newest" ${state.requestSort === "newest" ? "selected" : ""}>Newest</option>
                   <option value="oldest" ${state.requestSort === "oldest" ? "selected" : ""}>Oldest</option>
@@ -3176,9 +3176,9 @@
           </section>
           <aside class="mock-editor">
             <!-- Mode Tabs -->
-            <div class="mode-tabs" style="display: flex; border-bottom: 1px solid #d9e1ee; background: #f8fafc;">
-              <button class="mode-tab${state.activeRightTab === "mocks" ? " active" : ""}" type="button" data-mode-tab="mocks" style="flex: 1; padding: 10px; border: none; border-bottom: 2px solid ${state.activeRightTab === "mocks" ? "#2563eb" : "transparent"}; background: transparent; color: ${state.activeRightTab === "mocks" ? "#2563eb" : "#64748b"}; font-weight: 600; cursor: pointer; text-align: center; font-size: 12px;">Mock Rules</button>
-              <button class="mode-tab${state.activeRightTab === "snapshots" ? " active" : ""}" type="button" data-mode-tab="snapshots" style="flex: 1; padding: 10px; border: none; border-bottom: 2px solid ${state.activeRightTab === "snapshots" ? "#2563eb" : "transparent"}; background: transparent; color: ${state.activeRightTab === "snapshots" ? "#2563eb" : "#64748b"}; font-weight: 600; cursor: pointer; text-align: center; font-size: 12px;">Snapshots</button>
+            <div class="mode-tabs inline-style-b50f579e">
+              <button class="mode-tab${state.activeRightTab === "mocks" ? " active" : ""}" type="button" data-mode-tab="mocks">Mock Rules</button>
+              <button class="mode-tab${state.activeRightTab === "snapshots" ? " active" : ""}" type="button" data-mode-tab="snapshots">Snapshots</button>
             </div>
             
             ${state.activeRightTab === "mocks" ? `
@@ -3186,9 +3186,9 @@
               <div class="tab-content mocks-content">
                 <div class="mock-head${state.mockGroupSelectionMode ? " selection-mode" : ""}">
                   ${state.mockGroupSelectionMode ? "" : `
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="inline-style-3088da11">
                       <strong>Mock rules</strong>
-                      <label class="toggle mock-toggle" style="margin-left: 2px;" title="Enable/Disable all mock rules">
+                      <label class="toggle mock-toggle inline-style-39bb1bb7" title="Enable/Disable all mock rules">
                         <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
                       </label>
@@ -3196,14 +3196,14 @@
                   `}
                   <div class="mock-head-actions">
                     ${state.mockGroupSelectionMode ? `
-                      <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedMockGroupKeys.size}</span>
-                      <div style="display: flex; gap: 4px;">
-                        <button type="button" class="mini-btn" data-select-all-mock-groups style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${filteredGroups.length ? "" : "disabled"}>All</button>
-                        <button type="button" class="mini-btn" data-deselect-all-mock-groups style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>None</button>
+                      <span class="inline-style-4977d7aa">Selected: ${state.selectedMockGroupKeys.size}</span>
+                      <div class="inline-style-d2f87c7f">
+                        <button type="button" class="mini-btn inline-style-b69973d9" data-select-all-mock-groups ${filteredGroups.length ? "" : "disabled"}>All</button>
+                        <button type="button" class="mini-btn inline-style-32b56291" data-deselect-all-mock-groups ${state.selectedMockGroupKeys.size ? "" : "disabled"}>None</button>
                       </div>
-                      <div style="display: flex; gap: 6px; margin-left: auto;">
-                        <button type="button" data-delete-selected-mock-groups style="background: #dc2626; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"}>Delete ${state.selectedMockGroupKeys.size || ""}</button>
-                        <button type="button" data-cancel-mock-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
+                      <div class="inline-style-4b3bf9f6">
+                        <button type="button" data-delete-selected-mock-groups title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"} class="inline-style-eb42bfe7">Delete ${state.selectedMockGroupKeys.size || ""}</button>
+                        <button type="button" data-cancel-mock-selection class="inline-style-c2a44570">Cancel</button>
                       </div>
                     ` : `
                       <button type="button" class="action-select-btn icon-btn" data-start-mock-selection title="Batch select mock rules" aria-label="Batch select mock rules" ${filteredGroups.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
@@ -3214,7 +3214,7 @@
                   </div>
                 </div>
                 ${groupTabsHtml}
-                <div class="mock-layout" style="grid-template-rows: 1fr;">
+                <div class="mock-layout inline-style-f5b13794">
                   <div class="mock-list">
                     ${filteredGroups.length ? filteredGroups.sort((a, b) => {
                       const aActive = a.activeMock ? 1 : 0;
@@ -3230,9 +3230,9 @@
               <div class="tab-content snapshots-content">
                 <div class="mock-head${state.snapshotListSelectionMode ? " selection-mode" : ""}">
                   ${state.snapshotListSelectionMode ? "" : `
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="inline-style-3088da11">
                       <strong>Snapshots</strong>
-                      <label class="toggle snapshot-toggle" style="margin-left: 2px;" title="Enable/Disable active snapshot">
+                      <label class="toggle snapshot-toggle inline-style-39bb1bb7" title="Enable/Disable active snapshot">
                         <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
                       </label>
@@ -3240,14 +3240,14 @@
                   `}
                   <div class="mock-head-actions">
                     ${state.snapshotListSelectionMode ? `
-                      <span style="font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap;">Selected: ${state.selectedSnapshotIds.size}</span>
-                      <div style="display: flex; gap: 4px;">
-                        <button type="button" class="mini-btn" data-toggle-all-snapshots style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.snapshots.length ? "" : "disabled"}>All</button>
-                        <button type="button" class="mini-btn" data-deselect-all-snapshots style="height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" ${state.selectedSnapshotIds.size ? "" : "disabled"}>None</button>
+                      <span class="inline-style-4977d7aa">Selected: ${state.selectedSnapshotIds.size}</span>
+                      <div class="inline-style-d2f87c7f">
+                        <button type="button" class="mini-btn inline-style-b69973d9" data-toggle-all-snapshots ${state.snapshots.length ? "" : "disabled"}>All</button>
+                        <button type="button" class="mini-btn inline-style-32b56291" data-deselect-all-snapshots ${state.selectedSnapshotIds.size ? "" : "disabled"}>None</button>
                       </div>
-                      <div style="display: flex; gap: 6px; margin-left: auto;">
-                        <button type="button" data-delete-selected-snapshots style="background: #dc2626; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;" title="Delete selected snapshots" ${state.selectedSnapshotIds.size ? "" : "disabled"}>Delete ${state.selectedSnapshotIds.size || ""}</button>
-                        <button type="button" data-cancel-snapshot-selection style="background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">Cancel</button>
+                      <div class="inline-style-4b3bf9f6">
+                        <button type="button" data-delete-selected-snapshots title="Delete selected snapshots" ${state.selectedSnapshotIds.size ? "" : "disabled"} class="inline-style-eb42bfe7">Delete ${state.selectedSnapshotIds.size || ""}</button>
+                        <button type="button" data-cancel-snapshot-selection class="inline-style-c2a44570">Cancel</button>
                       </div>
                     ` : `
                       <button type="button" class="action-select-btn icon-btn" data-start-snapshot-selection title="Batch select snapshots" aria-label="Batch select snapshots" ${state.snapshots.length ? "" : "disabled"}><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></button>
@@ -3256,7 +3256,7 @@
                     `}
                   </div>
                 </div>
-                <div class="mock-layout" style="grid-template-rows: 1fr;">
+                <div class="mock-layout inline-style-f5b13794">
                   <div class="mock-list">
                     ${state.snapshots.length ? state.snapshots.map(snapshotListRow).join("") : emptyState("No snapshots")}
                   </div>
@@ -3291,7 +3291,7 @@
     let checkboxHtml = "";
     if (state.snapshotSelectionMode) {
       const isChecked = state.selectedSnapshotRequestIds.has(request.id) ? "checked" : "";
-      checkboxHtml = `<input type="checkbox" class="snapshot-select-checkbox" data-toggle-snapshot-select="${escapeAttr(request.id)}" ${isChecked} style="width: 12px; height: 12px; margin-right: 6px; cursor: pointer; flex-shrink: 0;" onclick="event.stopPropagation();" />`;
+      checkboxHtml = `<input type="checkbox" class="snapshot-select-checkbox inline-style-937d6183" data-toggle-snapshot-select="${escapeAttr(request.id)}" ${isChecked} onclick="event.stopPropagation();" />`;
     }
 
     return `
@@ -3345,7 +3345,7 @@
           <strong>${escapeHtml(snapshot.name)}</strong>
           <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
         </span>
-        <label class="toggle snapshot-toggle" style="justify-self: end; display: inline-flex;" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
+        <label class="toggle snapshot-toggle inline-style-7c61589b" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
           <input type="checkbox" data-toggle-snapshot-item="${escapeAttr(snapshot.id)}" ${enabled ? "checked" : ""} />
           <span class="switch" aria-hidden="true"></span>
         </label>
@@ -3374,12 +3374,12 @@
       const methodClass = `method-${(rule.method || "GET").toLowerCase()}`;
       const stepCount = rule.responses ? rule.responses.length : 0;
       return `
-        <button type="button" class="snapshot-rule-nav-item${isSelected ? " active" : ""}" data-select-snapshot-rule-idx="${ruleIdx}" style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 8px; border-radius: 6px; border: 1px solid ${isSelected ? "#93c5fd" : "#e2e8f0"}; background: ${isSelected ? "#eff6ff" : "#ffffff"}; cursor: pointer; text-align: left; width: 100%; transition: all 0.15s ease;">
-          <div style="display: flex; align-items: center; gap: 6px; width: 100%;">
-            <span class="method-badge ${methodClass}" style="font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; font-family: monospace;">${escapeHtml(rule.method)}</span>
-            <span style="font-size: 11px; font-weight: 600; color: ${isSelected ? "#1e40af" : "#334155"}; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; flex: 1;" title="${escapeAttr(rule.pattern)}">${escapeHtml(formatPathDisplay(rule.pattern) || "Rule #" + (ruleIdx + 1))}</span>
+        <button type="button" class="snapshot-rule-nav-item${isSelected ? " active" : ""}" data-select-snapshot-rule-idx="${ruleIdx}">
+          <div class="inline-style-7d66ce40">
+            <span class="method-badge ${methodClass} inline-style-5b62b5f4">${escapeHtml(rule.method)}</span>
+            <span title="${escapeAttr(rule.pattern)}">${escapeHtml(formatPathDisplay(rule.pattern) || "Rule #" + (ruleIdx + 1))}</span>
           </div>
-          <div style="font-size: 10px; color: #64748b; margin-left: 2px;">${stepCount} step${stepCount === 1 ? "" : "s"}</div>
+          <div class="inline-style-3da7d443">${stepCount} step${stepCount === 1 ? "" : "s"}</div>
         </button>
       `;
     }).join("");
@@ -3398,28 +3398,28 @@
         const isBodyCollapsed = state.collapsedSections.has(bodyTitle);
 
         return `
-          <div class="step-card" style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-              <span style="font-size: 11px; font-weight: 700; color: #475569;">Step ${stepNum}</span>
+          <div class="step-card inline-style-3c130608">
+            <div class="inline-style-2898cf4e">
+              <span class="inline-style-001f330c">Step ${stepNum}</span>
               <button type="button" class="danger-text-btn" data-delete-snapshot-step="${activeRuleIdx}-${stepIdx}">Delete Step</button>
             </div>
-            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
-                <span style="font-size: 10px; color: #475569; font-weight: 600;">Status</span>
-                <div style="display: flex; gap: 4px; align-items: center;">
-                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
-                  <div style="display: flex; gap: 2px; flex-shrink: 0;">
+            <div class="inline-style-a90c3ad4">
+              <div class="inline-style-69fcbc54">
+                <span class="inline-style-fcc4bef5">Status</span>
+                <div class="inline-style-d4b45fcb">
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.status))}" data-snapshot-field="status" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" / class="inline-style-eed848c5">
+                  <div class="inline-style-17be620d">
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-status="200" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">200</button>
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-status="404" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">404</button>
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-status="500" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">500</button>
                   </div>
                 </div>
               </div>
-              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
-                <span style="font-size: 10px; color: #475569; font-weight: 600;">Delay (ms)</span>
-                <div style="display: flex; gap: 4px; align-items: center;">
-                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
-                  <div style="display: flex; gap: 2px; flex-shrink: 0;">
+              <div class="inline-style-69fcbc54">
+                <span class="inline-style-fcc4bef5">Delay (ms)</span>
+                <div class="inline-style-d4b45fcb">
+                  <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(String(resp.delay))}" data-snapshot-field="delay" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" / class="inline-style-eed848c5">
+                  <div class="inline-style-17be620d">
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="0" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">0</button>
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="500" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">500</button>
                     <button type="button" class="quick-fill-btn" data-fill-snapshot-delay="1000" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">1000</button>
@@ -3429,145 +3429,145 @@
             </div>
 
             ${showRequestBody ? `
-              <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${requestBodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
-                <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
-                  <div style="display: flex; align-items: center; gap: 4px;">
+              <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="${requestBodyTitle}">
+                <h3 data-section-toggle class="inline-style-d7069fd9">
+                  <div class="inline-style-df7e0737">
                     <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                       <polyline points="9 18 15 12 9 6"></polyline>
                     </svg>
                     <span>Request Body (match key)</span>
                   </div>
                 </h3>
-                <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" style="width: 100%; min-height: 64px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.requestBody || "")}</textarea>
+                <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" class="inline-style-55fd89f8">${escapeHtml(resp.requestBody || "")}</textarea>
               </div>
             ` : ""}
             
-            <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="${headerTitle}" style="margin-top: 4px; margin-bottom: 4px;">
-              <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
-                <div style="display: flex; align-items: center; gap: 4px;">
+            <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="${headerTitle}">
+              <h3 data-section-toggle class="inline-style-d7069fd9">
+                <div class="inline-style-df7e0737">
                   <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                     <polyline points="9 18 15 12 9 6"></polyline>
                   </svg>
                   <span>Headers (JSON)</span>
                 </div>
-                <button type="button" class="format-btn" data-snapshot-format-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+                <button type="button" class="format-btn inline-style-53876483" data-snapshot-format-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON">Format</button>
               </h3>
-              <textarea data-snapshot-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="5" style="width: 100%; min-height: 80px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
+              <textarea data-snapshot-field="headers" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="5" class="inline-style-ed7ecbfa">${escapeHtml(JSON.stringify(resp.headers || {}, null, 2))}</textarea>
             </div>
 
-            <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="${bodyTitle}" style="margin-top: 4px; margin-bottom: 4px;">
-              <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
-                <div style="display: flex; align-items: center; gap: 4px;">
+            <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="${bodyTitle}">
+              <h3 data-section-toggle class="inline-style-d7069fd9">
+                <div class="inline-style-df7e0737">
                   <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                     <polyline points="9 18 15 12 9 6"></polyline>
                   </svg>
                   <span>Body</span>
                 </div>
-                <button type="button" class="format-btn" data-snapshot-format-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON" style="margin-left: auto;">Format</button>
+                <button type="button" class="format-btn inline-style-53876483" data-snapshot-format-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON">Format</button>
               </h3>
-              <textarea data-snapshot-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="10" style="width: 100%; min-height: 320px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical;">${escapeHtml(resp.body)}</textarea>
+              <textarea data-snapshot-field="body" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="10" class="inline-style-36e688ae">${escapeHtml(resp.body)}</textarea>
             </div>
           </div>
         `;
       }).join("");
 
       activeRuleHtml = `
-        <div class="snapshot-rule-card" style="border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #f8fafc;">
-          <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
-            <select data-rule-field="method" data-rule-idx="${activeRuleIdx}" style="width: 80px; font-weight: 700; font-size: 11px; flex-shrink: 0;">
+        <div class="snapshot-rule-card inline-style-4643c484">
+          <div class="inline-style-7e031d49">
+            <select data-rule-field="method" data-rule-idx="${activeRuleIdx}" class="inline-style-da92d20b">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((m) => `<option ${activeRule.method === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
-            <input type="text" value="${escapeAttr(activeRule.pattern)}" data-rule-field="pattern" data-rule-idx="${activeRuleIdx}" style="flex-grow: 1; font-size: 11px; padding: 4px 6px;" placeholder="URL pattern (e.g. /api/user)" />
-            <div style="display: flex; gap: 4px; align-items: center; flex-shrink: 0;">
-              <button type="button" class="mini-btn icon-action-btn" data-move-snapshot-rule-up="${activeRuleIdx}" ${activeRuleIdx === 0 ? "disabled" : ""} title="Move Rule Up" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
+            <input type="text" value="${escapeAttr(activeRule.pattern)}" data-rule-field="pattern" data-rule-idx="${activeRuleIdx}" placeholder="URL pattern (e.g. /api/user)" / class="inline-style-2baa3336">
+            <div class="inline-style-a3619e75">
+              <button type="button" class="mini-btn icon-action-btn inline-style-405319d0" data-move-snapshot-rule-up="${activeRuleIdx}" ${activeRuleIdx === 0 ? "disabled" : ""} title="Move Rule Up">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
               </button>
-              <button type="button" class="mini-btn icon-action-btn" data-move-snapshot-rule-down="${activeRuleIdx}" ${activeRuleIdx === rules.length - 1 ? "disabled" : ""} title="Move Rule Down" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;">
+              <button type="button" class="mini-btn icon-action-btn inline-style-405319d0" data-move-snapshot-rule-down="${activeRuleIdx}" ${activeRuleIdx === rules.length - 1 ? "disabled" : ""} title="Move Rule Down">
                 <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
             </div>
-            <button type="button" class="danger-text-btn" data-delete-snapshot-rule="${activeRuleIdx}" style="white-space: nowrap;">Delete Rule</button>
+            <button type="button" class="danger-text-btn inline-style-93c6e1d4" data-delete-snapshot-rule="${activeRuleIdx}">Delete Rule</button>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 10px; color: #64748b; font-weight: 600;">On overflow:</span>
-            <select data-rule-field="overflow" data-rule-idx="${activeRuleIdx}" style="font-size: 10px; padding: 2px 4px;">
+          <div class="inline-style-3088da11">
+            <span class="inline-style-9657d8ef">On overflow:</span>
+            <select data-rule-field="overflow" data-rule-idx="${activeRuleIdx}" class="inline-style-98ef65a3">
               <option value="repeat-last" ${activeRule.overflow === "repeat-last" ? "selected" : ""}>Repeat last step</option>
               <option value="loop" ${activeRule.overflow === "loop" ? "selected" : ""}>Loop back to start</option>
             </select>
           </div>
         </div>
 
-        <div style="margin-bottom: 12px;">
-          <div style="font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 8px;">Response Steps (${activeRule.responses ? activeRule.responses.length : 0})</div>
+        <div class="inline-style-72d6c38e">
+          <div class="inline-style-099f2f9b">Response Steps (${activeRule.responses ? activeRule.responses.length : 0})</div>
           <div class="steps-container">
             ${stepsHtml}
           </div>
-          <button type="button" data-add-snapshot-step="${activeRuleIdx}" class="dashed-btn" style="margin-top: 8px; font-size: 11px; width: 100%;">+ Add Response Step</button>
+          <button type="button" data-add-snapshot-step="${activeRuleIdx}" class="dashed-btn inline-style-a58400ce">+ Add Response Step</button>
         </div>
       `;
     } else {
       activeRuleHtml = `
-        <div style="padding: 40px 16px; text-align: center; color: #64748b; font-size: 12px;">
+        <div class="inline-style-b7c6d194">
           No rules defined in this snapshot.<br/>
-          <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 12px; width: auto; display: inline-block; padding: 6px 16px;">+ Add Intercept Rule</button>
+          <button type="button" data-add-snapshot-rule class="dashed-btn inline-style-ec87dbc4">+ Add Intercept Rule</button>
         </div>
       `;
     }
 
     return `
-      <div class="snapshot-editor-split" style="display: flex; width: 100%; height: 100%; overflow: hidden;">
+      <div class="snapshot-editor-split inline-style-ead64a57">
         <!-- Left Column: API / Rule List -->
-        <div class="snapshot-editor-left" style="width: 240px; min-width: 200px; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; padding: 12px; box-sizing: border-box;">
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e1;">
-            <label style="font-size: 11px; font-weight: 700; color: #475569; display: flex; flex-direction: column; gap: 4px;">
+        <div class="snapshot-editor-left inline-style-19e522d2">
+          <div class="inline-style-0dc8ce8d">
+            <label class="inline-style-7cd69ac3">
               Snapshot Name
-              <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot style="width: 100%; font-size: 12px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;" />
+              <input type="text" value="${escapeAttr(snapshot.name)}" data-rename-snapshot / class="inline-style-c1fc34e5">
             </label>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 2px;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 10px; font-weight: 700; color: #64748b;">Active</span>
-                <label class="toggle snapshot-toggle" style="display: inline-flex;" title="Activate/Deactivate Snapshot">
+            <div class="inline-style-15cf1092">
+              <div class="inline-style-c779fa16">
+                <span class="inline-style-cdf84111">Active</span>
+                <label class="toggle snapshot-toggle inline-style-d8784122" title="Activate/Deactivate Snapshot">
                   <input type="checkbox" data-toggle-active-snapshot ${isActive ? "checked" : ""} />
                   <span class="switch" aria-hidden="true"></span>
                 </label>
               </div>
-              <button type="button" data-delete-snapshot class="danger" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Delete Snapshot">
+              <button type="button" data-delete-snapshot class="danger inline-style-03f14acf" title="Delete Snapshot">
                 <svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2-2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                 Delete
               </button>
             </div>
           </div>
 
-          <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+          <div class="inline-style-d26ebb6f">
             Intercept Rules (${rules.length})
           </div>
 
-          <div class="snapshot-rules-nav" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px;">
-            ${rules.length ? rulesNavHtml : `<div style="font-size: 11px; color: #94a3b8; font-style: italic; padding: 8px 0;">No rules added</div>`}
+          <div class="snapshot-rules-nav inline-style-0ed06088">
+            ${rules.length ? rulesNavHtml : `<div class="inline-style-20bc6b97">No rules added</div>`}
           </div>
 
-          <button type="button" data-add-snapshot-rule class="dashed-btn" style="margin-top: 8px; font-size: 11px; padding: 6px; flex-shrink: 0;">
+          <button type="button" data-add-snapshot-rule class="dashed-btn inline-style-6854d60c">
             + Add Intercept Rule
           </button>
         </div>
 
         <!-- Right Column: Selected Rule Detail -->
-        <div class="snapshot-editor-right" style="flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #fff;">
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0;">
-            <div style="font-size: 12px; font-weight: 700; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px;">
-              ${activeRule ? `Rule #${activeRuleIdx + 1}: <code style="background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px; color: #0284c7;">${escapeHtml(activeRule.method)} ${escapeHtml(formatPathDisplay(activeRule.pattern) || "/pattern")}</code>` : "Snapshot Rules Editor"}
+        <div class="snapshot-editor-right inline-style-939afb22">
+          <div class="inline-style-a0e9e1e7">
+            <div class="inline-style-f99da621">
+              ${activeRule ? `Rule #${activeRuleIdx + 1}: <code class="inline-style-12988dcf">${escapeHtml(activeRule.method)} ${escapeHtml(formatPathDisplay(activeRule.pattern) || "/pattern")}</code>` : "Snapshot Rules Editor"}
             </div>
-            <div style="display: flex; gap: 8px; flex-shrink: 0;">
-              <button type="button" data-save-snapshot-edit class="${isSaved ? "primary saved" : "primary"}" style="font-size: 11px; padding: 4px 14px; min-height: 28px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+            <div class="inline-style-1691bfba">
+              <button type="button" data-save-snapshot-edit class="${isSaved ? "primary saved" : "primary"} inline-style-8703530a">
                 ${isSaved ? `Saved` : `Save Rules`}
               </button>
-              <button type="button" data-cancel-snapshot-edit class="mini-btn" style="font-size: 11px; padding: 4px 10px; min-height: 28px; border-radius: 6px; cursor: pointer;">
+              <button type="button" data-cancel-snapshot-edit class="mini-btn inline-style-c915b0e8">
                 Reset Draft
               </button>
             </div>
           </div>
 
-          <div class="snapshot-rule-detail" style="flex: 1; overflow-y: auto; padding: 16px;">
+          <div class="snapshot-rule-detail inline-style-ce3370f9">
             ${activeRuleHtml}
           </div>
         </div>
@@ -3587,7 +3587,7 @@
       const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
       return `
         <div class="menu-backdrop" data-close-menu></div>
-        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+        <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
           <button
             type="button"
             data-export-single-snapshot="${escapeAttr(menu.snapshotId)}"
@@ -3601,7 +3601,7 @@
             data-delete-snapshot-item="${escapeAttr(menu.snapshotId)}"
             role="menuitem"
           >
-            <span class="menu-title" style="color: #df2222; font-weight: 800;">Delete Snapshot</span>
+            <span class="menu-title inline-style-65e00a19">Delete Snapshot</span>
             <span class="menu-subtitle">${snap ? escapeHtml(snap.name) : ""}</span>
           </button>
         </div>
@@ -3614,13 +3614,13 @@
       const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
       return `
         <div class="menu-backdrop" data-close-menu></div>
-        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+        <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
           <button
             type="button"
             data-delete-mock-group="${escapeAttr(menu.groupKey)}"
             role="menuitem"
           >
-            <span class="menu-title" style="color: #df2222; font-weight: 800;">Delete mock rule</span>
+            <span class="menu-title inline-style-65e00a19">Delete mock rule</span>
             <span class="menu-subtitle">${group ? escapeHtml(`${group.method} ${group.pattern}`) : "Endpoint unavailable"}</span>
           </button>
         </div>
@@ -3672,7 +3672,7 @@
 
     return `
       <div class="menu-backdrop" data-close-menu></div>
-      <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
+      <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
         ${buttonsHtml}
       </div>
     `;
@@ -3686,7 +3686,7 @@
         <strong>${escapeHtml(request.url)}</strong>
       </div>
       <div class="meta">
-        <span>Status: <strong class="${statusClass(request.status)}" style="font-weight: 700;">${escapeHtml(String(request.status))}</strong></span>
+        <span>Status: <strong class="${statusClass(request.status)} inline-style-42acb60e">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
         ${source.linkable && source.mockId
           ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(source.mockId)}" data-source-type="${source.snapshotted ? "snapshot" : "mock"}" title="View ${source.snapshotted ? "snapshot config" : "mock rule"}">${source.snapshotted ? "Snapshotted" : "Mocked"} ↗</button>`
@@ -3707,20 +3707,20 @@
     const editorId = selected?.id || group.mocks[0]?.id || "";
     const isRequestBodyCollapsed = state.collapsedSections.has("Mock Rule Request Body");
     return `
-      <div class="endpoint-global-settings" style="border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc;">
-        <div style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px;">
-          <label style="width: 80px; flex-shrink: 0; margin-bottom: 0;">Method
+      <div class="endpoint-global-settings inline-style-84daa513">
+        <div class="inline-style-ccfb99cb">
+          <label class="inline-style-d132b26d">Method
             <select data-group-field="method" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}">
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
             </select>
           </label>
-        <label style="flex-grow: 1; margin-bottom: 0;">URL contains or /regex/
+        <label class="inline-style-82a068eb">URL contains or /regex/
           <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
         </label>
         </div>
-        <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Rule Request Body" style="margin-bottom: 8px;">
-          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer;">
-            <div style="display: flex; align-items: center; gap: 4px;">
+        <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""} inline-style-7f3cbaf6" data-section-title="Mock Rule Request Body">
+          <h3 data-section-toggle class="inline-style-d7069fd9">
+            <div class="inline-style-df7e0737">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
@@ -3729,11 +3729,11 @@
           </h3>
           <textarea rows="4" data-group-field="requestBody" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" placeholder="Leave empty to match any request body">${escapeHtml(group.requestBody || "")}</textarea>
         </div>
-        <div style="display: flex; gap: 8px; align-items: flex-start;">
-          <label style="flex-grow: 1; margin-bottom: 0;">Rule Group
+        <div class="inline-style-680b8274">
+          <label class="inline-style-82a068eb">Rule Group
             <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
           </label>
-          <label style="flex-grow: 1; margin-bottom: 0;">Alias Name
+          <label class="inline-style-82a068eb">Alias Name
             <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
           </label>
         </div>
@@ -3774,22 +3774,22 @@
           <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
         <div class="pair">
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <span style="font-size: 12px; color: #526070;">Status</span>
-            <div style="display: flex; gap: 4px; align-items: center;">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
-              <div style="display: flex; gap: 2px; flex-shrink: 0;">
+          <div class="inline-style-ef1f3a5d">
+            <span class="inline-style-aae2bc9d">Status</span>
+            <div class="inline-style-d4b45fcb">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" / class="inline-style-eed848c5">
+              <div class="inline-style-17be620d">
                 <button type="button" class="quick-fill-btn" data-fill-mock-status="200" data-mock-id="${escapeAttr(mock.id)}">200</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-status="404" data-mock-id="${escapeAttr(mock.id)}">404</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-status="500" data-mock-id="${escapeAttr(mock.id)}">500</button>
               </div>
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 4px;">
-            <span style="font-size: 12px; color: #526070;">Delay ms</span>
-            <div style="display: flex; gap: 4px; align-items: center;">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" style="flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px;" />
-              <div style="display: flex; gap: 2px; flex-shrink: 0;">
+          <div class="inline-style-ef1f3a5d">
+            <span class="inline-style-aae2bc9d">Delay ms</span>
+            <div class="inline-style-d4b45fcb">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" / class="inline-style-eed848c5">
+              <div class="inline-style-17be620d">
                 <button type="button" class="quick-fill-btn" data-fill-mock-delay="0" data-mock-id="${escapeAttr(mock.id)}">0</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-delay="500" data-mock-id="${escapeAttr(mock.id)}">500</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-delay="1000" data-mock-id="${escapeAttr(mock.id)}">1000</button>
@@ -3806,28 +3806,28 @@
           </div>
         </div>
         
-        <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Headers" style="margin-top: 4px; margin-bottom: 4px;">
-          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 4px;">
+        <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="Mock Headers">
+          <h3 data-section-toggle class="inline-style-4057fc63">
+            <div class="inline-style-df7e0737">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
               <span>Headers JSON</span>
             </div>
-            <button type="button" class="format-btn" data-format-field="headers" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON" style="margin-left: auto;">Format</button>
+            <button type="button" class="format-btn inline-style-53876483" data-format-field="headers" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
           </h3>
           <textarea rows="3" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="headers">${escapeHtml(JSON.stringify(mock.headers, null, 2))}</textarea>
         </div>
 
-        <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Body" style="margin-top: 4px; margin-bottom: 4px;">
-          <h3 data-section-toggle style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 4px;">
+        <div class="code-section${isBodyCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="Mock Body">
+          <h3 data-section-toggle class="inline-style-4057fc63">
+            <div class="inline-style-df7e0737">
               <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
                 <polyline points="9 18 15 12 9 6"></polyline>
               </svg>
               <span>Response body</span>
             </div>
-            <button type="button" class="format-btn" data-format-field="body" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON" style="margin-left: auto;">Format</button>
+            <button type="button" class="format-btn inline-style-53876483" data-format-field="body" data-mock-id="${escapeAttr(mock.id)}" title="Format JSON">Format</button>
           </h3>
           <textarea rows="6" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="body">${escapeHtml(mock.body)}</textarea>
         </div>
@@ -5392,6 +5392,124 @@
         .request-list, .detail { border-bottom: 1px solid #d9e1ee; border-right: 0; }
         .mock-layout { grid-template-rows: 120px 1fr; }
       }
+      /* Extracted from former inline template styles. */
+      .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+      .inline-style-57e41c3b { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 440px; max-width: 90%; overflow: hidden; }
+      .inline-style-7ebc7e67 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
+      .inline-style-a57ba1a3 { margin: 0; font-size: 14px; color: #1e293b; font-weight: 700; }
+      .inline-style-df603a6e { background: transparent; border: none; font-size: 20px; cursor: pointer; color: #94a3b8; }
+      .inline-style-fe5ec6f6 { padding: 16px; font-size: 12px; color: #334155; }
+      .inline-style-3af47968 { display: block; font-weight: 600; color: #475569; margin-bottom: 4px; }
+      .inline-style-ee32b08f { font-size: 11px; color: #64748b; margin-top: 4px; }
+      .inline-style-5f6b5dd6 { margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px; }
+      .inline-style-4de12c33 { padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; }
+      .inline-style-1c132269 { margin-right: auto; }
+      .inline-style-19113f9d { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+      .inline-style-d7a3860a { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 680px; max-width: 90vw; max-height: 85vh; overflow: hidden; }
+      .inline-style-801856b0 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
+      .inline-style-e191b109 { padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0; }
+      .inline-style-69e3fe06 { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 860px; max-width: 95vw; height: 80vh; max-height: 85vh; overflow: hidden; }
+      .inline-style-086293cc { padding: 0; overflow: hidden; flex-grow: 1; min-height: 0; display: flex; flex-direction: row; height: 100%; }
+      .inline-style-c1762fa9 { gap: 8px; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom-color: #bae6fd; }
+      .inline-style-4977d7aa { font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap; }
+      .inline-style-d2f87c7f { display: flex; gap: 4px; }
+      .inline-style-b69973d9 { height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #93c5fd; border-radius: 4px; background: white; color: #1e3a8a; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-32b56291 { height: 26px; min-height: 26px; padding: 0 8px; font-size: 10px; cursor: pointer; border: 1px solid #cbd5e1; border-radius: 4px; background: white; color: #475569; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-4b3bf9f6 { display: flex; gap: 6px; margin-left: auto; }
+      .inline-style-f16d22c3 { background: #10b981; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-c2a44570 { background: #cbd5e1; color: #334155; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-88bc4114 { flex: 0 0 54px; width: 54px; text-align: center; padding: 0 4px; }
+      .inline-style-b50f579e { display: flex; border-bottom: 1px solid #d9e1ee; background: #f8fafc; }
+      .inline-style-3088da11 { display: flex; align-items: center; gap: 8px; }
+      .inline-style-39bb1bb7 { margin-left: 2px; }
+      .inline-style-eb42bfe7 { background: #dc2626; color: white; border: none; height: 26px; min-height: 26px; padding: 0 10px; border-radius: 4px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-f5b13794 { grid-template-rows: 1fr; }
+      .inline-style-937d6183 { width: 12px; height: 12px; margin-right: 6px; cursor: pointer; flex-shrink: 0; }
+      .inline-style-7c61589b { justify-self: end; display: inline-flex; }
+      .inline-style-7d66ce40 { display: flex; align-items: center; gap: 6px; width: 100%; }
+      .inline-style-5b62b5f4 { font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
+      .inline-style-3da7d443 { font-size: 10px; color: #64748b; margin-left: 2px; }
+      .inline-style-3c130608 { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; }
+      .inline-style-2898cf4e { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+      .inline-style-001f330c { font-size: 11px; font-weight: 700; color: #475569; }
+      .inline-style-a90c3ad4 { display: flex; gap: 6px; margin-bottom: 6px; }
+      .inline-style-69fcbc54 { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+      .inline-style-fcc4bef5 { font-size: 10px; color: #475569; font-weight: 600; }
+      .inline-style-d4b45fcb { display: flex; gap: 4px; align-items: center; }
+      .inline-style-eed848c5 { flex: 1; min-width: 0; font-size: 11px; padding: 2px 4px; }
+      .inline-style-17be620d { display: flex; gap: 2px; flex-shrink: 0; }
+      .inline-style-377a2898 { margin-top: 4px; margin-bottom: 4px; }
+      .inline-style-d7069fd9 { display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer; }
+      .inline-style-df7e0737 { display: flex; align-items: center; gap: 4px; }
+      .inline-style-55fd89f8 { width: 100%; min-height: 64px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical; }
+      .inline-style-53876483 { margin-left: auto; }
+      .inline-style-ed7ecbfa { width: 100%; min-height: 80px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical; }
+      .inline-style-36e688ae { width: 100%; min-height: 320px; font-size: 11px; padding: 4px 6px; font-family: monospace; box-sizing: border-box; resize: vertical; }
+      .inline-style-4643c484 { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 16px; background: #f8fafc; }
+      .inline-style-7e031d49 { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+      .inline-style-da92d20b { width: 80px; font-weight: 700; font-size: 11px; flex-shrink: 0; }
+      .inline-style-2baa3336 { flex-grow: 1; font-size: 11px; padding: 4px 6px; }
+      .inline-style-a3619e75 { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+      .inline-style-405319d0 { height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+      .inline-style-93c6e1d4 { white-space: nowrap; }
+      .inline-style-9657d8ef { font-size: 10px; color: #64748b; font-weight: 600; }
+      .inline-style-98ef65a3 { font-size: 10px; padding: 2px 4px; }
+      .inline-style-72d6c38e { margin-bottom: 12px; }
+      .inline-style-099f2f9b { font-size: 11px; font-weight: 700; color: #334155; margin-bottom: 8px; }
+      .inline-style-a58400ce { margin-top: 8px; font-size: 11px; width: 100%; }
+      .inline-style-b7c6d194 { padding: 40px 16px; text-align: center; color: #64748b; font-size: 12px; }
+      .inline-style-ec87dbc4 { margin-top: 12px; width: auto; display: inline-block; padding: 6px 16px; }
+      .inline-style-ead64a57 { display: flex; width: 100%; height: 100%; overflow: hidden; }
+      .inline-style-19e522d2 { width: 240px; min-width: 200px; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; padding: 12px; box-sizing: border-box; }
+      .inline-style-0dc8ce8d { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e1; }
+      .inline-style-7cd69ac3 { font-size: 11px; font-weight: 700; color: #475569; display: flex; flex-direction: column; gap: 4px; }
+      .inline-style-c1fc34e5 { width: 100%; font-size: 12px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
+      .inline-style-15cf1092 { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+      .inline-style-c779fa16 { display: flex; align-items: center; gap: 6px; }
+      .inline-style-cdf84111 { font-size: 10px; font-weight: 700; color: #64748b; }
+      .inline-style-d8784122 { display: inline-flex; }
+      .inline-style-03f14acf { font-size: 10px; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; }
+      .inline-style-d26ebb6f { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+      .inline-style-0ed06088 { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; }
+      .inline-style-20bc6b97 { font-size: 11px; color: #94a3b8; font-style: italic; padding: 8px 0; }
+      .inline-style-6854d60c { margin-top: 8px; font-size: 11px; padding: 6px; flex-shrink: 0; }
+      .inline-style-939afb22 { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100%; overflow: hidden; background: #fff; }
+      .inline-style-a0e9e1e7 { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; }
+      .inline-style-f99da621 { font-size: 12px; font-weight: 700; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px; }
+      .inline-style-12988dcf { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px; color: #0284c7; }
+      .inline-style-1691bfba { display: flex; gap: 8px; flex-shrink: 0; }
+      .inline-style-8703530a { font-size: 11px; padding: 4px 14px; min-height: 28px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+      .inline-style-c915b0e8 { font-size: 11px; padding: 4px 10px; min-height: 28px; border-radius: 6px; cursor: pointer; }
+      .inline-style-ce3370f9 { flex: 1; overflow-y: auto; padding: 16px; }
+      .inline-style-65e00a19 { color: #df2222; font-weight: 800; }
+      .inline-style-42acb60e { font-weight: 700; }
+      .inline-style-84daa513 { border: 1px solid #d9e1ee; border-radius: 8px; padding: 10px; margin-bottom: 12px; background: #f8fafc; }
+      .inline-style-ccfb99cb { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+      .inline-style-d132b26d { width: 80px; flex-shrink: 0; margin-bottom: 0; }
+      .inline-style-82a068eb { flex-grow: 1; margin-bottom: 0; }
+      .inline-style-7f3cbaf6 { margin-bottom: 8px; }
+      .inline-style-680b8274 { display: flex; gap: 8px; align-items: flex-start; }
+      .inline-style-ef1f3a5d { display: flex; flex-direction: column; gap: 4px; }
+      .inline-style-aae2bc9d { font-size: 12px; color: #526070; }
+      .inline-style-4057fc63 { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+      .inline-style-7d254e7b { font-size: 13px; margin: 12px 0 6px; color: #243047; }
+      .inline-style-91008667 { font-size: 13px; margin: 16px 0 6px; color: #243047; }
+      .inline-style-274892f5 { font-size: 11px; color: #526070; margin: 0 0 6px; }
+      .sw-status-text { font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+      .sw-status-text.active { color: #059669; }
+      .sw-status-text.inactive { color: #64748b; }
+      .sw-status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+      .sw-status-dot.active { background: #10b981; }
+      .sw-status-dot.inactive { background: #94a3b8; }
+      .mode-tab { flex: 1; padding: 10px; border: none; background: transparent; font-weight: 600; cursor: pointer; text-align: center; font-size: 12px; }
+      .mode-tab.active { border-bottom: 2px solid #2563eb; color: #2563eb; }
+      .mode-tab:not(.active) { border-bottom: 2px solid transparent; color: #64748b; }
+      .snapshot-rule-nav-item { border: 1px solid #e2e8f0; background: #ffffff; }
+      .snapshot-rule-nav-item.active { border-color: #93c5fd; background: #eff6ff; }
+      .snapshot-rule-nav-item > span:not(.method-badge) { color: #334155; }
+      .snapshot-rule-nav-item.active > span:not(.method-badge) { color: #1e40af; }
+      .context-menu[data-left][data-top] { left: attr(data-left type(<length>)); top: attr(data-top type(<length>)); }
+
     `;
   }
 
