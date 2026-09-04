@@ -29,7 +29,7 @@
     mocks: [],
     requestSort: "newest",
     requestSearch: "",
-    collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers", "Mock Rule Request Body"]),
+    collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers", "Mock Rule Request Body", "Mock Rule Metadata"]),
     floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: safeLocalStorageGet("embedded-devtools-mock-enabled") !== "false",
@@ -50,6 +50,7 @@
     originalFetch: null,
     OriginalXHR: null,
     showSettingsModal: false,
+    confirmDialog: null,
     storageUsage: null,
     editingSnapshotId: null,
     editingSnapshotDraft: null,
@@ -125,7 +126,7 @@
     const persistedSnapshots = await readPersistedSnapshots();
     state.snapshots = persistedSnapshots || [];
     state.activeSnapshotId = await readActiveSnapshotId();
-    
+
     if (state.activeSnapshotId) {
       state.activeRightTab = "snapshots";
       state.selectedSnapshotId = state.activeSnapshotId;
@@ -1314,6 +1315,22 @@
   function bindPanelEvents(root) {
     const floatBtn = root.querySelector(".float-button");
 
+    root.querySelectorAll("[data-confirm-cancel]").forEach((el) => {
+      el.addEventListener("click", () => {
+        state.confirmDialog = null;
+        notify();
+      });
+    });
+    root.querySelector("[data-confirm-delete]")?.addEventListener("click", () => {
+      const dialog = state.confirmDialog;
+      if (!dialog) return;
+      state.confirmDialog = null;
+      if (dialog.type === "mock") deleteMockById(dialog.ids[0]);
+      if (dialog.type === "mock-groups") deleteMockGroupsByKeys(dialog.ids);
+      if (dialog.type === "snapshot" || dialog.type === "snapshots") deleteSnapshotsByIds(dialog.ids);
+      notify();
+    });
+
     if (floatBtn && !floatBtn._eventsBound) {
       floatBtn._eventsBound = true;
       let idleTimer = null;
@@ -1523,7 +1540,7 @@
         rule.responses.push({
           requestBody: req.requestBody || "",
           status: Number(req.status || 200),
-          delay: 200,
+          delay: 0,
           headers: req.responseHeaders || { "content-type": "application/json" },
           body: req.responseText || ""
         });
@@ -1557,7 +1574,14 @@
           status: 200,
           delay: 0,
           headers: { "content-type": "application/json" },
-          body: { ok: true }
+          body: JSON.stringify(
+            {
+              status: "SUCCESS",
+              data: { result: "ok" }
+            },
+            null,
+            2
+          )
         },
         state.mocks.length
       );
@@ -1689,26 +1713,19 @@
       notify();
     });
     root.querySelectorAll("[data-delete-mock]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
         const id = button.getAttribute("data-delete-mock");
         const targetMock = state.mocks.find((mock) => mock.id === id);
-        state.mocks = state.mocks.filter((mock) => mock.id !== id);
-        state.mocks = enforceSingleActivePerEndpoint(state.mocks);
-        if (state.selectedMockId === id) {
-          if (targetMock) {
-            const remainingMocksForGroup = state.mocks.filter(
-              (mock) => mock.method === targetMock.method && mock.pattern === targetMock.pattern
-            );
-            if (remainingMocksForGroup.length > 0) {
-              state.selectedMockId = remainingMocksForGroup[0].id;
-            } else {
-              state.selectedMockId = null;
-            }
-          } else {
-            state.selectedMockId = null;
-          }
+        if (targetMock) {
+          openConfirmDialog("mock", [id], "Delete this config?");
         }
-        saveMocks();
+      });
+    });
+    root.querySelectorAll("[data-delete-mock-rule]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.getAttribute("data-delete-mock-rule");
+        if (key) openConfirmDialog("mock-groups", [key], "Delete this mock rule?");
       });
     });
     root.querySelectorAll("[data-select-mock]").forEach((button) => {
@@ -1771,18 +1788,8 @@
         const groupKey = item.getAttribute("data-delete-mock-group");
         if (groupKey) {
           const group = getMockGroups().find((g) => g.key === groupKey);
-          if (group) {
-            const groupIds = new Set(group.mocks.map((mock) => mock.id));
-            state.mocks = state.mocks.filter((mock) => !groupIds.has(mock.id));
-            const hasSelected = group.mocks.some((m) => m.id === state.selectedMockId);
-            if (hasSelected) {
-              state.selectedMockId = null;
-            }
-            saveMocks();
-          }
+          if (group) openConfirmDialog("mock-groups", [groupKey], "Delete this mock rule?");
         }
-        state.contextMenu = null;
-        notify();
       });
     });
     root.querySelectorAll("[data-save-mock]").forEach((button) => {
@@ -1795,7 +1802,14 @@
       "200": {
         status: 200,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: 200, success: true, data: {} }, null, 2)
+        body: JSON.stringify(
+          {
+            status: "SUCCESS",
+            data: { result: "ok" }
+          },
+          null,
+          2
+        )
       },
       "404": {
         status: 404,
@@ -1825,6 +1839,20 @@
         if (statusInput) statusInput.value = template.status;
         if (headersTextarea) headersTextarea.value = JSON.stringify(template.headers, null, 2);
         if (bodyTextarea) bodyTextarea.value = template.body;
+      });
+    });
+    root.querySelectorAll("[data-snapshot-template]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const ruleIdx = Number(button.getAttribute("data-rule-idx"));
+        const stepIdx = Number(button.getAttribute("data-step-idx"));
+        const template = templates[button.getAttribute("data-snapshot-template")];
+        const response = state.editingSnapshotDraft?.rules?.[ruleIdx]?.responses?.[stepIdx];
+        if (!template || !response) return;
+
+        response.status = template.status;
+        response.headers = { ...template.headers };
+        response.body = template.body;
+        notify();
       });
     });
     root.querySelectorAll("[data-fill-mock-status]").forEach((button) => {
@@ -2140,18 +2168,8 @@
     root.querySelectorAll("[data-delete-snapshot-item]").forEach((item) => {
       item.addEventListener("click", () => {
         const id = item.getAttribute("data-delete-snapshot-item");
-        state.snapshots = state.snapshots.filter((s) => s.id !== id);
-        if (state.activeSnapshotId === id) {
-          state.activeSnapshotId = null;
-          persistActiveSnapshotId(null);
-          syncServiceWorkerSnapshot();
-        }
-        if (state.selectedSnapshotId === id) {
-          state.selectedSnapshotId = state.snapshots[0]?.id || null;
-        }
-        persistSnapshots(state.snapshots);
-        state.contextMenu = null;
-        notify();
+        const snapshot = state.snapshots.find((entry) => entry.id === id);
+        if (snapshot) openConfirmDialog("snapshot", [id], `Delete snapshot “${snapshot.name || "Untitled"}”?`);
       });
     });
     root.querySelectorAll("[data-toggle-snapshot-selection]").forEach((input) => {
@@ -2214,18 +2232,8 @@
 
     root.querySelector("[data-delete-snapshot]")?.addEventListener("click", () => {
       if (!state.selectedSnapshotId) return;
-      if (!window.confirm("Are you sure you want to delete this snapshot?")) return;
-
-      state.snapshots = state.snapshots.filter((s) => s.id !== state.selectedSnapshotId);
-      if (state.activeSnapshotId === state.selectedSnapshotId) {
-        state.activeSnapshotId = null;
-        persistActiveSnapshotId(null);
-        syncServiceWorkerSnapshot();
-      }
-      state.selectedSnapshotId = state.snapshots[0]?.id || null;
-      startEditingSnapshot(state.selectedSnapshotId);
-      persistSnapshots(state.snapshots);
-      notify();
+      const snapshot = state.snapshots.find((entry) => entry.id === state.selectedSnapshotId);
+      if (snapshot) openConfirmDialog("snapshot", [snapshot.id], `Delete snapshot “${snapshot.name || "Untitled"}”?`);
     });
 
     root.querySelectorAll("[data-rule-field]").forEach((el) => {
@@ -2297,7 +2305,7 @@
           pattern: "/api/new-pattern",
           overflow: "repeat-last",
           responses: [
-            { status: 200, delay: 200, headers: { "content-type": "application/json" }, body: "{}" }
+            { status: 200, delay: 0, headers: { "content-type": "application/json" }, body: "{}" }
           ]
         });
         state.selectedSnapshotRuleIdx = state.editingSnapshotDraft.rules.length - 1;
@@ -2402,7 +2410,7 @@
           responses: selectedReqs.map((req) => ({
             requestBody: req.requestBody || "",
             status: Number(req.status || 200),
-            delay: 200,
+            delay: 0,
             headers: req.responseHeaders || { "content-type": "application/json" },
             body: req.responseText || ""
           }))
@@ -2639,11 +2647,31 @@
     const selectedKeys = new Set(state.selectedMockGroupKeys);
     if (!selectedKeys.size) return;
 
+    openConfirmDialog("mock-groups", Array.from(selectedKeys), `Delete ${selectedKeys.size} selected mock rule${selectedKeys.size === 1 ? "" : "s"}?`);
+  }
+
+  function deleteMockById(id) {
+    const targetMock = state.mocks.find((mock) => mock.id === id);
+    if (!targetMock) return;
+    state.mocks = state.mocks.filter((mock) => mock.id !== id);
+    state.mocks = enforceSingleActivePerEndpoint(state.mocks);
+    if (state.selectedMockId === id) {
+      const remainingMocksForGroup = state.mocks.filter(
+        (mock) => mock.method === targetMock.method && mock.pattern === targetMock.pattern
+      );
+      state.selectedMockId = remainingMocksForGroup[0]?.id || null;
+    }
+    saveMocks(state.mocks);
+  }
+
+  function deleteMockGroupsByKeys(keys) {
+    const selectedKeys = new Set(keys);
     const selectedMockIds = new Set(
-      getMockGroups()
-        .filter((group) => selectedKeys.has(group.key))
-        .flatMap((group) => group.mocks.map((mock) => mock.id))
+      state.mocks
+        .filter((mock) => selectedKeys.has(mockActivationKey(mock)))
+        .map((mock) => mock.id)
     );
+
     state.mocks = state.mocks.filter((mock) => !selectedMockIds.has(mock.id));
     state.mocks = enforceSingleActivePerEndpoint(state.mocks);
     if (state.selectedMockId && !state.mocks.some((mock) => mock.id === state.selectedMockId)) {
@@ -2658,8 +2686,11 @@
     const selectedIds = new Set(state.selectedSnapshotIds);
     if (!selectedIds.size) return;
     const label = selectedIds.size === 1 ? "snapshot" : "snapshots";
-    if (!window.confirm(`Delete ${selectedIds.size} selected ${label}?`)) return;
+    openConfirmDialog("snapshots", Array.from(selectedIds), `Delete ${selectedIds.size} selected ${label}?`);
+  }
 
+  function deleteSnapshotsByIds(ids) {
+    const selectedIds = new Set(ids);
     state.snapshots = state.snapshots.filter((snapshot) => !selectedIds.has(snapshot.id));
     if (state.activeSnapshotId && selectedIds.has(state.activeSnapshotId)) {
       state.activeSnapshotId = null;
@@ -2674,7 +2705,33 @@
     state.snapshotListSelectionMode = false;
     state.selectedSnapshotIds.clear();
     persistSnapshots(state.snapshots);
+  }
+
+  function openConfirmDialog(type, ids, title) {
+    state.contextMenu = null;
+    state.confirmDialog = { type, ids, title };
     notify();
+  }
+
+  function confirmDialogTemplate() {
+    if (!state.confirmDialog) return "";
+    const isMock = state.confirmDialog.type.startsWith("mock");
+    const subject = state.confirmDialog.type === "mock" ? "config" : isMock ? "mock rule" : "snapshot";
+    return `
+      <div class="confirm-overlay" data-confirm-cancel>
+        <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onclick="event.stopPropagation();">
+          <div class="confirm-icon" aria-hidden="true">!</div>
+          <div class="confirm-copy">
+            <h3 id="confirm-title">${escapeHtml(state.confirmDialog.title)}</h3>
+            <p>This action cannot be undone. The ${subject} will be permanently removed.</p>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" class="secondary-btn" data-confirm-cancel>Cancel</button>
+            <button type="button" class="confirm-delete-btn" data-confirm-delete>Delete</button>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function exportMocks() {
@@ -3015,7 +3072,7 @@
         <div class="modal-overlay inline-style-19113f9d" data-close-details-modal>
           <div class="modal-card inline-style-d7a3860a" onclick="event.stopPropagation();">
             <div class="modal-header inline-style-801856b0">
-              <h3 class="inline-style-a57ba1a3">Edit Mock Rule</h3>
+              <h3 class="inline-style-a57ba1a3">${state.pendingMockId === state.editingMockId ? "Add Mock Rule" : "Edit Mock Rule"}</h3>
               <button type="button" class="close-btn inline-style-df603a6e" data-close-details-modal>&times;</button>
             </div>
             <div class="modal-body inline-style-e191b109">
@@ -3107,7 +3164,7 @@
     return `
         <header class="topbar">
           <div>
-            <strong>Network Mock</strong>
+            <strong>Network</strong>
             <span>${state.requests.length} request${state.requests.length === 1 ? "" : "s"}</span>
             <div class="sw-status-badge ${isSwActive ? "active" : "inactive"}" data-sw-indicator title="${escapeAttr(swTooltip)}">
               <span class="sw-status-dot"></span>
@@ -3187,7 +3244,7 @@
                 <div class="mock-head${state.mockGroupSelectionMode ? " selection-mode" : ""}">
                   ${state.mockGroupSelectionMode ? "" : `
                     <div class="inline-style-3088da11">
-                      <strong>Mock rules</strong>
+                      <strong>Enabled</strong>
                       <label class="toggle mock-toggle inline-style-39bb1bb7" title="Enable/Disable all mock rules">
                         <input type="checkbox" data-global-toggle-mock ${state.mockEnabled ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
@@ -3231,7 +3288,7 @@
                 <div class="mock-head${state.snapshotListSelectionMode ? " selection-mode" : ""}">
                   ${state.snapshotListSelectionMode ? "" : `
                     <div class="inline-style-3088da11">
-                      <strong>Snapshots</strong>
+                      <strong>Enabled</strong>
                       <label class="toggle snapshot-toggle inline-style-39bb1bb7" title="Enable/Disable active snapshot">
                         <input type="checkbox" data-global-toggle-snapshot ${state.activeSnapshotId ? "checked" : ""} />
                         <span class="switch" aria-hidden="true"></span>
@@ -3268,6 +3325,7 @@
         ${state.contextMenu ? contextMenuTemplate(state.contextMenu) : ""}
         ${settingsModalTemplate()}
         ${detailsModalTemplate()}
+        ${confirmDialogTemplate()}
       `;
     }
 
@@ -3401,7 +3459,13 @@
           <div class="step-card inline-style-3c130608">
             <div class="inline-style-2898cf4e">
               <span class="inline-style-001f330c">Step ${stepNum}</span>
-              <button type="button" class="danger-text-btn" data-delete-snapshot-step="${activeRuleIdx}-${stepIdx}">Delete Step</button>
+              <div class="snapshot-step-actions">
+                <span class="snapshot-preset-label">Preset</span>
+                <button type="button" class="snapshot-preset-btn" data-snapshot-template="200" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">200 OK</button>
+                <button type="button" class="snapshot-preset-btn" data-snapshot-template="404" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">404</button>
+                <button type="button" class="snapshot-preset-btn" data-snapshot-template="500" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">500</button>
+                <button type="button" class="danger-text-btn" data-delete-snapshot-step="${activeRuleIdx}-${stepIdx}">Delete Step</button>
+              </div>
             </div>
             <div class="inline-style-a90c3ad4">
               <div class="inline-style-69fcbc54">
@@ -3438,7 +3502,7 @@
                     <span>Request Body (match key)</span>
                   </div>
                 </h3>
-                <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" class="inline-style-55fd89f8">${escapeHtml(resp.requestBody || "")}</textarea>
+                <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" class="inline-style-55fd89f8" placeholder="Leave empty to match any request body">${escapeHtml(resp.requestBody || "")}</textarea>
               </div>
             ` : ""}
             
@@ -3706,6 +3770,7 @@
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
     const editorId = selected?.id || group.mocks[0]?.id || "";
     const isRequestBodyCollapsed = state.collapsedSections.has("Mock Rule Request Body");
+    const isMetadataCollapsed = state.collapsedSections.has("Mock Rule Metadata");
     return `
       <div class="endpoint-global-settings inline-style-84daa513">
         <div class="inline-style-ccfb99cb">
@@ -3729,13 +3794,23 @@
           </h3>
           <textarea rows="4" data-group-field="requestBody" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" placeholder="Leave empty to match any request body">${escapeHtml(group.requestBody || "")}</textarea>
         </div>
-        <div class="inline-style-680b8274">
-          <label class="inline-style-82a068eb">Rule Group
-            <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
-          </label>
-          <label class="inline-style-82a068eb">Alias Name
-            <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
-          </label>
+        <div class="code-section rule-metadata${isMetadataCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Rule Metadata">
+          <h3 data-section-toggle class="inline-style-d7069fd9">
+            <div class="inline-style-df7e0737">
+              <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-chevron">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span>Rule metadata</span>
+            </div>
+          </h3>
+          <div class="inline-style-680b8274 rule-metadata-fields">
+            <label class="inline-style-82a068eb">Rule Group
+              <input value="${escapeAttr(group.group || "")}" placeholder="e.g. User, Order" data-group-field="group" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
+            </label>
+            <label class="inline-style-82a068eb">Alias Name
+              <input value="${escapeAttr(group.aliasName || "")}" placeholder="e.g. User list, Create order" data-group-field="aliasName" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" data-group-method="${escapeAttr(group.method)}" data-group-pattern="${escapeAttr(group.pattern)}" />
+            </label>
+          </div>
         </div>
       </div>
       <div class="config-tabs">
@@ -3749,12 +3824,13 @@
   function configTabTemplate(mock) {
     const active = mock.enabled ? " is-active" : "";
     const selected = mock.id === state.selectedMockId ? " is-selected" : "";
-    const title = mock.name || `${mock.status} response`;
+    const title = mock.name || "Response";
     return `
-      <button class="config-tab${active}${selected}" type="button" data-select-mock="${escapeAttr(mock.id)}">
+      <div class="config-tab${active}${selected}" role="button" tabindex="0" data-select-mock="${escapeAttr(mock.id)}">
         <span>${escapeHtml(title)}</span>
         <b>${escapeHtml(String(mock.status))}</b>
-      </button>
+        <button type="button" class="config-delete-btn" data-delete-mock="${escapeAttr(mock.id)}" aria-label="Delete ${escapeAttr(title)}" title="Delete config">&times;</button>
+      </div>
     `;
   }
 
@@ -3765,11 +3841,21 @@
 
     return `
       <article class="mock-card" data-mock-card="${escapeAttr(mock.id)}">
-        <label class="toggle">
-          <input type="checkbox" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="enabled" ${mock.enabled ? "checked" : ""} />
-          <span class="switch" aria-hidden="true"></span>
-          <span>${mock.enabled ? "Active config" : "Set active"}</span>
-        </label>
+        <div class="config-top-row">
+          <label class="toggle">
+            <input type="checkbox" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="enabled" ${mock.enabled ? "checked" : ""} />
+            <span class="switch" aria-hidden="true"></span>
+            <span>${mock.enabled ? "Active config" : "Set active"}</span>
+          </label>
+          <div class="template-selector">
+            <span class="template-selector-title">Preset</span>
+            <div class="template-tabs">
+              <button class="template-tab" type="button" data-template="200" data-mock-id="${escapeAttr(mock.id)}">200 OK</button>
+              <button class="template-tab" type="button" data-template="404" data-mock-id="${escapeAttr(mock.id)}">404 Not Found</button>
+              <button class="template-tab" type="button" data-template="500" data-mock-id="${escapeAttr(mock.id)}">500 Error</button>
+            </div>
+          </div>
+        </div>
         <label>Config name
           <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
@@ -3797,15 +3883,6 @@
             </div>
           </div>
         </div>
-        <div class="template-selector">
-          <span class="template-selector-title">Template Preset</span>
-          <div class="template-tabs">
-            <button class="template-tab" type="button" data-template="200" data-mock-id="${escapeAttr(mock.id)}">200 OK</button>
-            <button class="template-tab" type="button" data-template="404" data-mock-id="${escapeAttr(mock.id)}">404 Not Found</button>
-            <button class="template-tab" type="button" data-template="500" data-mock-id="${escapeAttr(mock.id)}">500 Error</button>
-          </div>
-        </div>
-        
         <div class="code-section${isHeadersCollapsed ? " is-collapsed" : ""} inline-style-377a2898" data-section-title="Mock Headers">
           <h3 data-section-toggle class="inline-style-4057fc63">
             <div class="inline-style-df7e0737">
@@ -3832,8 +3909,8 @@
           <textarea rows="6" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="body">${escapeHtml(mock.body)}</textarea>
         </div>
         <div class="mock-actions">
+          <button type="button" class="danger" data-delete-mock-rule="${escapeAttr(mockActivationKey(mock))}">Delete Rule</button>
           <button type="button" class="primary${isSaved ? " saved" : ""}" data-save-mock="${escapeAttr(mock.id)}">${isSaved ? "Saved" : "Save"}</button>
-          <button type="button" class="danger" data-delete-mock="${escapeAttr(mock.id)}">Delete</button>
         </div>
       </article>
     `;
@@ -5591,8 +5668,301 @@
       .snapshot-rule-nav-item.active { border-color: #93c5fd; background: #eff6ff; }
       .snapshot-rule-nav-item > span:not(.method-badge) { color: #334155; }
       .snapshot-rule-nav-item.active > span:not(.method-badge) { color: #1e40af; }
+      .snapshot-rule-nav-item {
+        align-items: stretch;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 8px 10px;
+        text-align: left;
+        width: 100%;
+      }
+      .snapshot-rule-nav-item:hover { border-color: #d5deeb; background: #fafbfd; }
+      .snapshot-rule-nav-item.active { border-color: #9eacbd; background: #e5eaf1; box-shadow: none; }
+      .snapshot-rule-nav-item > .inline-style-7d66ce40 { justify-content: flex-start; min-width: 0; }
+      .snapshot-rule-nav-item > .inline-style-3da7d443 { margin-left: 0; color: #8793a5; text-align: left; }
+      .snapshot-rule-nav-item .method-badge {
+        min-width: 32px;
+        padding: 1px 2px;
+        border-radius: 2px;
+        background: transparent !important;
+        color: #526070 !important;
+        text-align: center;
+      }
+      .snapshot-rule-nav-item .inline-style-7d66ce40 > span:not(.method-badge) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .snapshot-rule-nav-item.active .inline-style-7d66ce40 > span:not(.method-badge) { color: #26364d; }
       .request-filter .search-input.inline-style-88bc4114 { flex: 0 0 54px; width: 54px; }
       .context-menu[data-left][data-top] { left: attr(data-left type(<length>)); top: attr(data-top type(<length>)); }
+
+      /* Modern desktop panel skin. Keep the selectors semantic so the
+         rendering/interaction code above remains unchanged. */
+      :host {
+        --panel-ink: #172033;
+        --panel-muted: #718096;
+        --panel-line: #e5eaf2;
+        --panel-surface: #ffffff;
+        --panel-canvas: #f6f8fc;
+        --panel-blue: #475569;
+        --panel-green: #0f9f78;
+      }
+      .float-button {
+        background: linear-gradient(135deg, #172033, #243b64);
+        border: 1px solid rgba(255,255,255,.18);
+        box-shadow: 0 14px 32px rgba(15,23,42,.28), inset 0 1px 0 rgba(255,255,255,.14);
+        height: 46px;
+        padding: 0 17px;
+      }
+      .float-button:hover { background: linear-gradient(135deg, #334155, #475569); }
+      .devtools {
+        background: var(--panel-canvas);
+        border: 1px solid #cfd8e6;
+        border-radius: 8px 8px 0 0;
+        box-shadow: 0 -24px 70px rgba(15,23,42,.22);
+        height: min(960px, 94vh);
+        min-height: 600px;
+        left: 24px;
+        right: 24px;
+      }
+      .topbar {
+        background: linear-gradient(105deg, #111a2d 0%, #1c2b49 100%);
+        height: 58px;
+        padding: 0 18px;
+      }
+      .topbar div { gap: 12px; }
+      .topbar span { color: #aebbd0; font-size: 12px; }
+      .sw-status-badge {
+        align-items: center;
+        height: 32px;
+        line-height: 1;
+        padding: 0 10px;
+        vertical-align: middle;
+      }
+      .topbar .sw-status-badge { gap: 7px; }
+      .topbar .sw-status-badge .sw-status-text {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        margin-top: 0;
+        line-height: 1;
+      }
+      .topbar nav { gap: 6px; }
+      .topbar nav .icon-btn { border-radius: 6px; height: 32px; width: 32px; }
+      .grid {
+        grid-template-columns: minmax(250px, .78fr) minmax(420px, 1.55fr) minmax(360px, 1fr);
+        height: calc(100% - 58px);
+      }
+      .request-list { border-right-color: var(--panel-line); }
+      .request-filter, .mock-group-tabs {
+        background: rgba(248,250,252,.92);
+        border-bottom-color: var(--panel-line);
+        padding: 10px 12px;
+      }
+      .request-filter { height: 52px; min-height: 52px; }
+      .request-filter .search-input, .request-filter .sort-select {
+        background: #fff;
+        border-color: #d5deeb;
+        border-radius: 8px;
+        height: 32px;
+        font-size: 12px;
+      }
+      .request-filter .sort-select { width: 92px; }
+      .request-row {
+        border-bottom-color: #eef2f7;
+        min-height: 40px;
+        padding: 0 12px;
+      }
+      .request-row:hover, .request-row.active { background: #f1f4f8; }
+      .method, .detail-title span, .endpoint-title strong, .rule-main strong { color: #475569; }
+      .detail { background: #f8faff; border-right-color: var(--panel-line); padding: 18px; }
+      .detail-title { margin-bottom: 14px; }
+      .detail-title span { background: #eef1f4; border-radius: 5px; padding: 6px 8px; }
+      .meta span { border-color: #dfe6f0; border-radius: 5px; padding: 6px 9px; }
+      .code-section { margin-bottom: 4px; }
+      .mock-card .code-section.is-collapsed { margin-bottom: 0; }
+      .mock-card .code-section.is-collapsed h3 { margin-bottom: 0; }
+      .endpoint-global-settings { padding: 8px; margin-bottom: 6px; }
+      .endpoint-global-settings .code-section { margin-bottom: 3px; }
+      .rule-metadata.is-collapsed .rule-metadata-fields { display: none; }
+      .rule-metadata.is-collapsed { margin-bottom: 0; }
+      .rule-metadata.is-collapsed h3 { margin-bottom: 0; }
+      .code-section h3 { color: #64748b; letter-spacing: .04em; }
+      pre { border-radius: 9px; padding: 12px; }
+      .mock-editor { background: var(--panel-surface); }
+      .mock-head { height: 58px; min-height: 58px; border-bottom-color: var(--panel-line); padding: 10px 16px; }
+      .mock-head strong { color: var(--panel-ink); font-size: 13px; }
+      .mock-group-tabs { padding: 10px 16px; gap: 7px; }
+      .mock-group-tab { border-color: #d8e1ed; border-radius: 6px; padding: 6px 12px; }
+      .mock-group-tab.active { background: #172033; border-color: #172033; }
+      /* The desktop editor currently renders one list pane at a time. Keep
+         the single grid child stretched so scrolling never leaves a blank
+         second track below the rules. */
+      .mock-layout { grid-template-rows: minmax(0, 1fr); }
+      .mock-list { background: #fbfcfe; border-bottom-color: var(--panel-line); min-height: 0; height: 100%; }
+      .mock-row { border-bottom-color: #eef2f7; height: 50px; min-height: 50px; padding: 8px 14px; }
+      .mock-row:hover, .mock-row.active { background: #f1f4f8; }
+      .mock-detail { padding: 16px; }
+      .endpoint-title, .mock-card { border-color: #dfe6f0; border-radius: 6px; }
+      .endpoint-title { background: #fbfdff; padding: 10px; margin-bottom: 6px; }
+      .config-tabs { gap: 6px; margin-bottom: 8px; }
+      .config-tab, .add-config-tab { border-color: #dfe6f0; border-radius: 6px; min-height: 28px; padding: 4px 8px 4px 20px; }
+      .add-config-tab { padding: 4px 10px; }
+      .config-tab { grid-template-columns: minmax(0, 1fr) max-content 18px; }
+      .config-delete-btn {
+        align-items: center;
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 3px !important;
+        color: #94a3b8 !important;
+        cursor: pointer;
+        display: inline-flex;
+        font-size: 16px;
+        height: 18px;
+        justify-content: center;
+        line-height: 1;
+        min-height: 18px;
+        padding: 0 !important;
+        width: 18px;
+      }
+      .config-delete-btn:hover { background: #fee2e2 !important; color: #b4534b !important; }
+      .config-tab.is-active { border-color: #dfe6f0; background: #fff; }
+      .config-tab.is-selected { background: #e9eef5; border-color: #aab9cd; }
+      .config-tab.is-selected span { color: #334155; }
+      .template-tab, .quick-fill-btn, .format-btn { border-color: #d8e1ed; border-radius: 5px; }
+      .template-selector { margin-top: 6px; margin-bottom: 6px; }
+      .mock-card { gap: 6px; }
+      .mock-actions { justify-content: space-between; }
+      .snapshot-step-actions { align-items: center; display: flex; gap: 5px; }
+      .snapshot-preset-label { color: #8793a5; font-size: 10px; font-weight: 600; margin-right: 2px; }
+      .snapshot-preset-btn {
+        min-height: 24px;
+        padding: 2px 7px;
+        border: 1px solid #d8e1ed;
+        border-radius: 4px;
+        background: #f8fafc;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 600;
+      }
+      .snapshot-preset-btn:hover { border-color: #aab9cd; background: #eef2f7; color: #334155; }
+      .config-top-row { align-items: flex-start; display: flex; justify-content: space-between; gap: 16px; }
+      .config-top-row > .toggle { flex: 0 0 auto; }
+      .config-top-row .template-selector { align-items: center; display: flex; gap: 8px; margin: 0; }
+      .config-top-row .template-selector-title { margin: 0; white-space: nowrap; }
+      .config-top-row .template-tabs { flex-wrap: nowrap; }
+      .config-top-row .template-tab { padding: 4px 7px; font-size: 10px; }
+      .mock-card textarea[data-mock-field="body"],
+      textarea[data-snapshot-field="body"] {
+        min-height: 280px;
+      }
+      input, select, textarea { border-color: #d5deeb; border-radius: 5px; }
+      input:focus, select:focus, textarea:focus { border-color: #7aa7f7; box-shadow: none !important; }
+      button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      .primary { background: #475569; border-color: #475569; border-radius: 5px; }
+      .primary:hover { background: #334155; border-color: #334155; }
+      .primary.saved { background: var(--panel-green); border-color: var(--panel-green); }
+      .icon-btn { border-color: #d5deeb; border-radius: 6px; }
+      .mode-tab.active { border-bottom-color: #475569 !important; color: #475569 !important; }
+      .mock-head-actions .inline-style-b69973d9 {
+        background: #eef2f7 !important;
+        border-color: #cbd5e1 !important;
+        color: #334155 !important;
+      }
+      .mock-head-actions .inline-style-b69973d9:hover {
+        background: #e2e8f0 !important;
+        border-color: #94a3b8 !important;
+      }
+      .mock-head-actions .inline-style-32b56291,
+      .mock-head-actions .inline-style-c2a44570 {
+        background: #fff !important;
+        border-color: #cbd5e1 !important;
+        color: #64748b !important;
+      }
+      .mock-head-actions .inline-style-32b56291:hover,
+      .mock-head-actions .inline-style-c2a44570:hover {
+        background: #f8fafc !important;
+        border-color: #94a3b8 !important;
+        color: #334155 !important;
+      }
+      .mock-head-actions .inline-style-eb42bfe7 {
+        background: #b4534b !important;
+        border-color: #b4534b !important;
+        color: #fff !important;
+      }
+      .mock-head-actions .inline-style-eb42bfe7:hover {
+        background: #9f3f39 !important;
+        border-color: #9f3f39 !important;
+      }
+      .empty { color: #8a96a8; }
+      .context-menu { border-color: #d5deeb; border-radius: 7px; box-shadow: 0 18px 42px rgba(15,23,42,.18); }
+      .modal-card { border-radius: 8px; box-shadow: 0 24px 70px rgba(15,23,42,.24); }
+      .confirm-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15,23,42,.34);
+        backdrop-filter: blur(3px);
+      }
+      .confirm-card {
+        width: min(400px, 100%);
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 12px;
+        padding: 20px;
+        border: 1px solid #d5deeb;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 20px 56px rgba(15,23,42,.22);
+      }
+      .confirm-icon {
+        display: grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #fff1f2;
+        color: #dc2626;
+        font-size: 17px;
+        font-weight: 800;
+      }
+      .confirm-copy h3 { margin: 2px 0 6px; color: #172033; font-size: 14px; line-height: 1.35; }
+      .confirm-copy p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.5; }
+      .confirm-actions { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+      .confirm-actions button { min-height: 30px; padding: 0 12px; border-radius: 5px; font-size: 12px; }
+      .confirm-delete-btn { border: 1px solid #dc2626; background: #dc2626; color: #fff; cursor: pointer; font-weight: 700; }
+      .confirm-delete-btn:hover { border-color: #b91c1c; background: #b91c1c; }
+      /* Detail modals live inside the transformed panel, so their fixed
+         positioning is bounded by the panel rather than the viewport. Keep
+         the card inside that containing block to prevent the header from
+         being clipped above the visible panel. */
+      .modal-overlay { padding: 12px; }
+      .inline-style-d7a3860a,
+      .inline-style-69e3fe06 {
+        max-height: calc(100% - 24px);
+      }
+      .inline-style-69e3fe06 {
+        height: min(80vh, calc(100% - 24px));
+      }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border: 3px solid transparent; background-clip: padding-box; border-radius: 999px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; border: 3px solid transparent; background-clip: padding-box; }
+      @media (min-width: 1280px) {
+        .devtools { left: 32px; right: 32px; }
+      }
 
     `;
   }
