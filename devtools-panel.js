@@ -1864,12 +1864,7 @@
           const statusInput = card.querySelector('[data-mock-field="status"]');
           if (statusInput) {
             statusInput.value = val;
-            statusInput.dispatchEvent(new Event("change", { bubbles: true }));
           }
-        }
-        const mock = state.mocks.find((m) => m.id === mockId);
-        if (mock) {
-          mock.status = Number(val);
         }
       });
     });
@@ -1882,12 +1877,7 @@
           const delayInput = card.querySelector('[data-mock-field="delay"]');
           if (delayInput) {
             delayInput.value = val;
-            delayInput.dispatchEvent(new Event("change", { bubbles: true }));
           }
-        }
-        const mock = state.mocks.find((m) => m.id === mockId);
-        if (mock) {
-          mock.delay = Number(val);
         }
       });
     });
@@ -3863,7 +3853,7 @@
           <div class="inline-style-ef1f3a5d">
             <span class="inline-style-aae2bc9d">Status</span>
             <div class="inline-style-d4b45fcb">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" / class="inline-style-eed848c5">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.status)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="status" class="inline-style-eed848c5">
               <div class="inline-style-17be620d">
                 <button type="button" class="quick-fill-btn" data-fill-mock-status="200" data-mock-id="${escapeAttr(mock.id)}">200</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-status="404" data-mock-id="${escapeAttr(mock.id)}">404</button>
@@ -3874,7 +3864,7 @@
           <div class="inline-style-ef1f3a5d">
             <span class="inline-style-aae2bc9d">Delay ms</span>
             <div class="inline-style-d4b45fcb">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" / class="inline-style-eed848c5">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${escapeAttr(mock.delay)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="delay" class="inline-style-eed848c5">
               <div class="inline-style-17be620d">
                 <button type="button" class="quick-fill-btn" data-fill-mock-delay="0" data-mock-id="${escapeAttr(mock.id)}">0</button>
                 <button type="button" class="quick-fill-btn" data-fill-mock-delay="500" data-mock-id="${escapeAttr(mock.id)}">500</button>
