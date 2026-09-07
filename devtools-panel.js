@@ -4593,7 +4593,9 @@
       .code-section h3 {
         color: #526070;
         font-size: 11px;
-        margin: 0 0 6px;
+        height: 23px;
+        line-height: 23px;
+        margin: 0;
         text-transform: uppercase;
         cursor: pointer;
         display: inline-flex;
