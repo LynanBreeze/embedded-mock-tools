@@ -18,6 +18,7 @@
     selectedId: null,
     selectedMockId: null,
     pendingMockId: null,
+    pendingMockIsAdditional: false,
     savedMockId: null,
     contextMenu: null,
     persistenceReady: false,
@@ -1611,6 +1612,7 @@
       // particular, it must not deactivate an existing rule while editing.
       state.mocks = [mock, ...state.mocks];
       state.pendingMockId = mock.id;
+      state.pendingMockIsAdditional = false;
       state.selectedMockId = mock.id;
       state.editingMockId = mock.id;
       notify();
@@ -2472,7 +2474,8 @@
     root.querySelectorAll(".close-btn[data-close-details-modal]").forEach((el) => {
       el.addEventListener("click", () => {
         if (state.pendingMockId) {
-          state.mocks = state.mocks.filter((mock) => mock.id !== state.pendingMockId);
+        state.mocks = state.mocks.filter((mock) => mock.id !== state.pendingMockId);
+        state.pendingMockIsAdditional = false;
           state.pendingMockId = null;
         }
         state.selectedMockId = null;
@@ -2636,6 +2639,7 @@
     state.mocks = enforceSingleActiveForMock(state.mocks, id);
     if (state.pendingMockId === id) {
       state.pendingMockId = null;
+      state.pendingMockIsAdditional = false;
     }
     state.selectedMockId = id;
     state.savedMockId = id;
@@ -2949,12 +2953,16 @@
       },
       state.mocks.length
     );
-    state.mocks = enforceSingleActiveForMock([mock, ...state.mocks], mock.id);
+    // Keep the draft isolated until Save; closing the modal must leave the
+    // existing active config unchanged.
+    state.mocks = [mock, ...state.mocks];
     state.activeRightTab = "mocks";
     state.selectedMockId = mock.id;
     state.editingMockId = mock.id;
+    state.pendingMockId = mock.id;
+    state.pendingMockIsAdditional = Boolean(existingGroup);
     state.contextMenu = null;
-    saveMocks();
+    notify();
   }
 
   function settingsModalTemplate() {
@@ -3085,7 +3093,7 @@
         <div class="modal-overlay inline-style-19113f9d" data-close-details-modal>
           <div class="modal-card inline-style-d7a3860a" onclick="event.stopPropagation();">
             <div class="modal-header inline-style-801856b0">
-              <h3 class="inline-style-a57ba1a3">${state.pendingMockId === state.editingMockId ? "Add Mock Rule" : "Edit Mock Rule"}</h3>
+              <h3 class="inline-style-a57ba1a3">${state.pendingMockId === state.editingMockId ? (state.pendingMockIsAdditional ? "Edit Mock Rule (Add New Config)" : "Add Mock Rule") : "Edit Mock Rule"}</h3>
               <button type="button" class="close-btn inline-style-df603a6e" data-close-details-modal>&times;</button>
             </div>
             <div class="modal-body inline-style-e191b109">
@@ -3286,12 +3294,7 @@
                 ${groupTabsHtml}
                 <div class="mock-layout inline-style-f5b13794">
                   <div class="mock-list">
-                    ${filteredGroups.length ? filteredGroups.sort((a, b) => {
-                      const aActive = a.activeMock ? 1 : 0;
-                      const bActive = b.activeMock ? 1 : 0;
-                      if (aActive !== bActive) return bActive - aActive;
-                      return a.key.localeCompare(b.key);
-                    }).map(mockListRow).join("") : emptyState("No mock rules")}
+                    ${filteredGroups.length ? filteredGroups.map(mockListRow).join("") : emptyState("No mock rules")}
                   </div>
                 </div>
               </div>
@@ -3665,7 +3668,7 @@
       const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
       return `
         <div class="menu-backdrop" data-close-menu></div>
-        <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
+        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
           <button
             type="button"
             data-export-single-snapshot="${escapeAttr(menu.snapshotId)}"
@@ -3692,7 +3695,7 @@
       const left = Math.max(8, Math.min(menu.x, boundsWidth - menuWidth - 8));
       return `
         <div class="menu-backdrop" data-close-menu></div>
-        <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
+        <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
           <button
             type="button"
             data-delete-mock-group="${escapeAttr(menu.groupKey)}"
@@ -3750,7 +3753,7 @@
 
     return `
       <div class="menu-backdrop" data-close-menu></div>
-      <div class="context-menu" data-left="${left}px" data-top="${top}px" role="menu">
+      <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
         ${buttonsHtml}
       </div>
     `;
