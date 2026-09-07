@@ -55,6 +55,7 @@
     editingSnapshotId: null,
     editingSnapshotDraft: null,
     selectedSnapshotRuleIdx: 0,
+    pendingSnapshotRuleScrollId: null,
     buttonPosition: null,
     savedSnapshotId: null
   };
@@ -1270,6 +1271,7 @@
         const el = root.querySelector(selector);
         if (el) el.scrollTop = scrollPositions[selector];
       });
+      scrollPendingSnapshotRuleIntoView(root);
 
       root.querySelectorAll("textarea").forEach((ta, idx) => {
         const id = ta.getAttribute("data-snapshot-field")
@@ -1310,6 +1312,26 @@
 
     state.subscribers.add(render);
     render();
+  }
+
+  function scrollPendingSnapshotRuleIntoView(root) {
+    const ruleId = state.pendingSnapshotRuleScrollId;
+    if (!ruleId) return;
+    state.pendingSnapshotRuleScrollId = null;
+
+    const nav = root.querySelector(".snapshot-rules-nav");
+    const item = nav?.querySelector(`[data-snapshot-rule-id="${cssEscape(ruleId)}"]`);
+    if (!nav || !item) return;
+
+    const padding = 8;
+    const navRect = nav.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+
+    if (itemRect.top < navRect.top + padding) {
+      nav.scrollTop += itemRect.top - navRect.top - padding;
+    } else if (itemRect.bottom > navRect.bottom - padding) {
+      nav.scrollTop += itemRect.bottom - navRect.bottom + padding;
+    }
   }
 
   function bindPanelEvents(root) {
@@ -1693,6 +1715,7 @@
             const ruleIdx = snapshot.rules.findIndex((r) => String(r.id) === String(sourceId));
             if (ruleIdx !== -1) {
               state.selectedSnapshotRuleIdx = ruleIdx;
+              state.pendingSnapshotRuleScrollId = sourceId;
             }
             notify();
           }
@@ -3423,7 +3446,7 @@
       const methodClass = `method-${(rule.method || "GET").toLowerCase()}`;
       const stepCount = rule.responses ? rule.responses.length : 0;
       return `
-        <button type="button" class="snapshot-rule-nav-item${isSelected ? " active" : ""}" data-select-snapshot-rule-idx="${ruleIdx}">
+        <button type="button" class="snapshot-rule-nav-item${isSelected ? " active" : ""}" data-select-snapshot-rule-idx="${ruleIdx}" data-snapshot-rule-id="${escapeAttr(rule.id)}">
           <div class="inline-style-7d66ce40">
             <span class="method-badge ${methodClass} inline-style-5b62b5f4">${escapeHtml(rule.method)}</span>
             <span title="${escapeAttr(rule.pattern)}">${escapeHtml(formatPathDisplay(rule.pattern) || "Rule #" + (ruleIdx + 1))}</span>
