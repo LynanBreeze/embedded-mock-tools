@@ -3386,7 +3386,7 @@
     const selected = checked ? " selected" : "";
     const totalSteps = snapshot.rules.reduce((acc, r) => acc + (r.responses ? r.responses.length : 0), 0);
     return `
-      <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-snapshot="${escapeAttr(snapshot.id)}">
+      <button class="mock-row snapshot ${active}${enabled}${selectionMode}${selected}" type="button" data-select-snapshot="${escapeAttr(snapshot.id)}">
         ${state.snapshotListSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-snapshot-selection="${escapeAttr(snapshot.id)}" ${checked ? "checked" : ""} />` : ""}
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
@@ -4817,6 +4817,9 @@
         text-align: left;
         width: 100%;
       }
+      .mock-row.snapshot {
+        grid-template-columns: 10px minmax(0, 1fr) 42px 0;
+      }
       .mock-row:hover, .mock-row.active {
         background: #eaf2ff;
       }
@@ -5715,8 +5718,7 @@
         border: 1px solid #cfd8e6;
         border-radius: 8px 8px 0 0;
         box-shadow: 0 -24px 70px rgba(15,23,42,.22);
-        height: min(960px, 94vh);
-        min-height: 600px;
+        height: 94vh;
         left: 24px;
         right: 24px;
       }
