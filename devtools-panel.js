@@ -59,6 +59,7 @@
     pendingSnapshotRuleScrollId: null,
     buttonPosition: null,
     savedSnapshotId: null
+    ,jsonTreeSections: new Set()
   };
 
   let pendingRenderFrame = null;
@@ -1823,6 +1824,29 @@
         saveMockFromForm(root, id);
       });
     });
+    root.querySelectorAll("[data-format-group-field]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.getAttribute("data-group-editor-id");
+        const field = root.querySelector(`[data-group-field="requestBody"][data-group-editor-id="${cssEscape(id)}"]`);
+        if (!field || !field.value.trim()) return;
+        try {
+          let source = field.value.trim();
+          let parsed;
+          try { parsed = JSON.parse(source); } catch (_e) {
+            parsed = JSON.parse(source.replace(/([{,]\s*)([A-Za-z_$][\w$-]*)\s*:/g, '$1"$2":'));
+          }
+          field.value = JSON.stringify(parsed, null, 2);
+          button.textContent = "Formatted!";
+          button.classList.add("format-success");
+          button.disabled = true;
+          window.setTimeout(() => { button.textContent = "Format"; button.classList.remove("format-success"); button.disabled = false; }, 1500);
+        } catch (_e) {
+          button.textContent = "Format error";
+          button.classList.add("format-error");
+          window.setTimeout(() => { button.textContent = "Format"; button.classList.remove("format-error"); }, 1500);
+        }
+      });
+    });
     const templates = {
       "200": {
         status: 200,
@@ -1994,6 +2018,14 @@
             console.error("Failed to copy text: ", err);
           });
         }
+      });
+    });
+    root.querySelectorAll("[data-toggle-json-tree]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const title = button.getAttribute("data-toggle-json-tree");
+        if (state.jsonTreeSections.has(title)) state.jsonTreeSections.delete(title);
+        else state.jsonTreeSections.add(title);
+        notify();
       });
     });
     const searchInput = root.querySelector("[data-search-input]");
@@ -2498,7 +2530,7 @@
         if (!textarea) return;
 
         try {
-          const parsed = parseHeadersInput(textarea.value);
+          const parsed = field === "requestBody" ? JSON.parse(textarea.value) : parseHeadersInput(textarea.value);
           const formatted = JSON.stringify(parsed, null, 2);
           textarea.value = formatted;
           
@@ -3519,6 +3551,7 @@
                     <span>Request Body (match key)</span>
                   </div>
                 </h3>
+                <button type="button" class="format-btn" data-snapshot-format-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" title="Format JSON">Format</button>
                 <textarea data-snapshot-field="requestBody" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}" data-snapshot-rule-idx="${activeRuleIdx}" data-snapshot-step-idx="${stepIdx}" rows="4" class="inline-style-55fd89f8" placeholder="Leave empty to match any request body">${escapeHtml(resp.requestBody || "")}</textarea>
               </div>
             ` : ""}
@@ -3809,6 +3842,7 @@
               <span>Request Body Match Key</span>
             </div>
           </h3>
+          <button type="button" class="format-btn" data-format-group-field data-group-editor-id="${escapeAttr(editorId)}" title="Format JSON">Format</button>
           <textarea rows="4" data-group-field="requestBody" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" placeholder="Leave empty to match any request body">${escapeHtml(group.requestBody || "")}</textarea>
         </div>
         <div class="code-section rule-metadata${isMetadataCollapsed ? " is-collapsed" : ""}" data-section-title="Mock Rule Metadata">
@@ -3964,6 +3998,8 @@
 
   function codeBlock(title, value) {
     const isCollapsed = state.collapsedSections.has(title);
+    let parsedJson = null;
+    try { parsedJson = JSON.parse(value); } catch (_e) {}
     let contentHtml = "";
     try {
       if (value && typeof value === "string" && (value.trim().startsWith("{") || value.trim().startsWith("["))) {
@@ -3983,6 +4019,7 @@
           </svg>
           <span>${title}</span>
         </h3>
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? "{}" : "⌘"}</button>` : ""}
         <button type="button" class="copy-btn" data-copy-btn title="Copy to clipboard">
           <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-copy">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -3992,9 +4029,19 @@
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </button>
-        <pre>${contentHtml}</pre>
+        ${state.jsonTreeSections.has(title) && parsedJson !== null ? `<div class="json-tree">${renderJsonTree(parsedJson)}</div>` : `<pre>${contentHtml}</pre>`}
       </div>
     `;
+  }
+
+  function renderJsonTree(value, key = "root") {
+    if (value === null || typeof value !== "object") {
+      const type = value === null ? "null" : typeof value;
+      return `<div class="json-tree-leaf"><span class="json-tree-key">${escapeHtml(key)}</span><span class="json-tree-colon">:</span><span class="json-tree-value ${type}">${escapeHtml(JSON.stringify(value))}</span></div>`;
+    }
+    const entries = Object.entries(value);
+    const label = Array.isArray(value) ? `Array(${entries.length})` : "object";
+    return `<details class="json-tree-node" open><summary><span class="json-tree-key">${escapeHtml(key)}</span><span class="json-tree-colon">:</span><span class="json-tree-type">${label}</span></summary><div class="json-tree-children">${entries.map(([childKey, child]) => renderJsonTree(child, childKey)).join("")}</div></details>`;
   }
 
   function emptyState(text) {
@@ -4577,6 +4624,36 @@
         height: 20px;
         padding: 0;
       }
+      .code-section .view-mode-btn {
+        position: absolute;
+        top: 0;
+        right: 24px;
+        border: 0;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        font-family: monospace;
+        width: 20px;
+        height: 20px;
+        padding: 0;
+        line-height: 20px;
+        text-align: center;
+        font-size: 12px;
+      }
+      .code-section .view-mode-btn.code { font-size: 13px; }
+      .code-section .view-mode-btn.tree { font-size: 17px; }
+      .json-tree { background: #111827; color: #dce7f7; border-radius: 4px; padding: 10px; overflow: auto; max-height: inherit; font: 12px/1.55 monospace; }
+      .json-tree-children { margin-left: 18px; }
+      .json-tree-leaf { padding: 1px 0; }
+      .json-tree summary { cursor: pointer; list-style-position: inside; padding: 1px 0; }
+      .json-tree summary::marker { color: #9fb3d1; }
+      .json-tree details:not([open]) > summary { color: #9fb3d1; }
+      .json-tree-key { color: #38bdf8; }
+      .json-tree-colon { color: #94a3b8; padding: 0 4px; }
+      .json-tree-type { color: #82aaff; }
+      .json-tree-value.string { color: #34d399; }
+      .json-tree-value.number { color: #fbbf24; }
+      .json-tree-value.boolean { color: #c084fc; }
       .code-section .copy-btn svg {
         width: 12px;
         height: 12px;
@@ -5133,6 +5210,7 @@
         color: #475569;
         cursor: pointer;
         font-size: 10px;
+        font-weight: 600;
         padding: 2px 6px;
         transition: all 0.2s ease;
         line-height: 1;
@@ -5352,7 +5430,6 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        backdrop-filter: blur(2px);
       }
       .modal-card {
         background: #fff;
@@ -5592,7 +5669,7 @@
         .mock-layout { grid-template-rows: 120px 1fr; }
       }
       /* Extracted from former inline template styles. */
-      .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+      .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; }
       .inline-style-57e41c3b { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 440px; max-width: 90%; overflow: hidden; }
       .inline-style-7ebc7e67 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
       .inline-style-a57ba1a3 { margin: 0; font-size: 14px; color: #1e293b; font-weight: 700; }
@@ -5603,11 +5680,11 @@
       .inline-style-5f6b5dd6 { margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px; }
       .inline-style-4de12c33 { padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; }
       .inline-style-1c132269 { margin-right: auto; }
-      .inline-style-19113f9d { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+      .inline-style-19113f9d { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; }
       .inline-style-d7a3860a { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 680px; max-width: 90vw; max-height: 85vh; overflow: hidden; }
       .inline-style-801856b0 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
       .inline-style-e191b109 { padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0; }
-      .inline-style-69e3fe06 { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 860px; max-width: 95vw; height: 80vh; max-height: 85vh; overflow: hidden; }
+      .inline-style-69e3fe06 { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 900px; max-width: 95vw; height: 80vh; max-height: 85vh; overflow: hidden; }
       .inline-style-086293cc { padding: 0; overflow: hidden; flex-grow: 1; min-height: 0; display: flex; flex-direction: row; height: 100%; }
       .inline-style-c1762fa9 { gap: 8px; justify-content: space-between; padding: 8px; background: #e0f2fe; border-bottom-color: #bae6fd; }
       .inline-style-4977d7aa { font-size: 11px; font-weight: 700; color: #0369a1; white-space: nowrap; }
@@ -5659,7 +5736,7 @@
       .inline-style-b7c6d194 { padding: 40px 16px; text-align: center; color: #64748b; font-size: 12px; }
       .inline-style-ec87dbc4 { margin-top: 12px; width: auto; display: inline-block; padding: 6px 16px; }
       .inline-style-ead64a57 { display: flex; width: 100%; height: 100%; overflow: hidden; }
-      .inline-style-19e522d2 { width: 240px; min-width: 200px; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; padding: 12px; box-sizing: border-box; }
+      .inline-style-19e522d2 { width: 260px; min-width: 220px; border-right: 1px solid #e2e8f0; background: #f8fafc; display: flex; flex-direction: column; flex-shrink: 0; padding: 12px; box-sizing: border-box; }
       .inline-style-0dc8ce8d { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e1; }
       .inline-style-7cd69ac3 { font-size: 11px; font-weight: 700; color: #475569; display: flex; flex-direction: column; gap: 4px; }
       .inline-style-c1fc34e5 { width: 100%; font-size: 12px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
@@ -5687,6 +5764,19 @@
       .inline-style-d132b26d { width: 80px; flex-shrink: 0; margin-bottom: 0; }
       .inline-style-82a068eb { flex-grow: 1; margin-bottom: 0; }
       .inline-style-7f3cbaf6 { margin-bottom: 8px; }
+      .inline-style-7f3cbaf6 [data-format-group-field] {
+        position: absolute;
+        top: 8px;
+        right: 0;
+        margin: 0;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 6px;
+        line-height: 1;
+      }
+      .inline-style-7f3cbaf6 h3 { margin-bottom: 6px; }
+      .inline-style-377a2898 { position: relative; }
+      .inline-style-377a2898 [data-snapshot-format-field="requestBody"] { position: absolute; top: 0; right: 0; margin: 0; font-weight: 600; }
       .inline-style-680b8274 { display: flex; gap: 8px; align-items: flex-start; }
       .inline-style-ef1f3a5d { display: flex; flex-direction: column; gap: 4px; }
       .inline-style-aae2bc9d { font-size: 12px; color: #526070; }
