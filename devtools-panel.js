@@ -2970,7 +2970,7 @@
 
             <div class="settings-group inline-style-5f6b5dd6">
               <label class="inline-style-3af47968">Version</label>
-              <div class="inline-style-ee32b08f">1.0.28</div>
+              <div class="inline-style-ee32b08f">1.0.29</div>
             </div>
           </div>
           <div class="modal-footer inline-style-4de12c33">
@@ -3393,6 +3393,7 @@
           <strong>${escapeHtml(snapshot.name)}</strong>
           <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
         </span>
+        <span></span>
         <label class="toggle snapshot-toggle inline-style-7c61589b" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
           <input type="checkbox" data-toggle-snapshot-item="${escapeAttr(snapshot.id)}" ${enabled ? "checked" : ""} />
           <span class="switch" aria-hidden="true"></span>
@@ -4818,7 +4819,7 @@
         width: 100%;
       }
       .mock-row.snapshot {
-        grid-template-columns: 10px minmax(0, 1fr) 42px 0;
+        grid-template-columns: 10px minmax(0, 1fr) 0 28px;
       }
       .mock-row:hover, .mock-row.active {
         background: #eaf2ff;
