@@ -4476,9 +4476,26 @@
       .status-pending { color: #8a95a5 !important; }
       .status-other { color: #5e6a7b !important; }
       .detail {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
         background: #f7f9fc;
         border-right: 1px solid #d9e1ee;
         padding: 14px;
+      }
+      .detail > * { flex-shrink: 0; }
+      .detail > [data-section-title="Response body"]:not(.is-collapsed) {
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 1;
+        min-height: 48px;
+      }
+      .detail > [data-section-title="Response body"] > h3 { flex-shrink: 0; }
+      .detail > [data-section-title="Response body"] > pre {
+        min-height: 0;
+        max-height: none;
+        flex-shrink: 1;
+        overflow: auto;
       }
       .detail-title {
         align-items: center;
