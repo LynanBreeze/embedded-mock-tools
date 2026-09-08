@@ -4166,14 +4166,15 @@
     `;
   }
 
-  function renderJsonTree(value, key = "root") {
+  function renderJsonTree(value, key = "root", isArrayEntry = false) {
+    const displayKey = isArrayEntry ? `[${key}]` : key;
     if (value === null || typeof value !== "object") {
       const type = value === null ? "null" : typeof value;
-      return `<div class="json-tree-leaf"><span class="json-tree-key">${escapeHtml(key)}</span><span class="json-tree-colon">:</span><span class="json-tree-value ${type}">${escapeHtml(JSON.stringify(value))}</span></div>`;
+      return `<div class="json-tree-leaf"><span class="json-tree-key${isArrayEntry ? " array-index" : ""}">${escapeHtml(displayKey)}</span><span class="json-tree-colon">:</span><span class="json-tree-value ${type}">${escapeHtml(JSON.stringify(value))}</span></div>`;
     }
     const entries = Object.entries(value);
     const label = Array.isArray(value) ? `Array(${entries.length})` : "object";
-    return `<details class="json-tree-node" open><summary><span class="json-tree-key">${escapeHtml(key)}</span><span class="json-tree-colon">:</span><span class="json-tree-type">${label}</span></summary><div class="json-tree-children">${entries.map(([childKey, child]) => renderJsonTree(child, childKey)).join("")}</div></details>`;
+    return `<details class="json-tree-node" open><summary><span class="json-tree-toggle" aria-hidden="true"></span><span class="json-tree-key">${escapeHtml(displayKey)}</span><span class="json-tree-colon">:</span><span class="json-tree-type">${label}</span></summary><div class="json-tree-children">${entries.map(([childKey, child]) => renderJsonTree(child, childKey, Array.isArray(value))).join("")}</div></details>`;
   }
 
   function emptyState(text) {
@@ -4774,18 +4775,22 @@
       }
       .code-section .view-mode-btn.code { font-size: 13px; }
       .code-section .view-mode-btn.tree { font-size: 17px; }
-      .json-tree { background: #111827; color: #dce7f7; border-radius: 4px; padding: 10px; overflow: auto; max-height: inherit; font: 12px/1.55 monospace; }
-      .json-tree-children { margin-left: 18px; }
-      .json-tree-leaf { padding: 1px 0; }
-      .json-tree summary { cursor: pointer; list-style-position: inside; padding: 1px 0; }
-      .json-tree summary::marker { color: #9fb3d1; }
+      .json-tree { background: #111827; color: #dce7f7; border-radius: 9px; padding: 12px; overflow: auto; max-height: inherit; font: 14px/1.7 monospace; }
+      .json-tree-children { margin-left: 36px; }
+      .json-tree-leaf { padding: 1px 0 1px 20px; white-space: nowrap; }
+      .json-tree summary { align-items: center; cursor: pointer; display: flex; list-style: none; padding: 1px 0; white-space: nowrap; }
+      .json-tree summary::-webkit-details-marker { display: none; }
+      .json-tree summary::marker { display: none; }
+      .json-tree-toggle { border-bottom: 1.5px solid #9fb3d1; border-right: 1.5px solid #9fb3d1; display: inline-block; flex: 0 0 9px; height: 9px; margin: -4px 11px 0 2px; transform: rotate(45deg); transition: transform 0.12s ease; width: 9px; }
+      .json-tree details:not([open]) > summary .json-tree-toggle { margin-top: 0; transform: rotate(-45deg); }
       .json-tree details:not([open]) > summary { color: #9fb3d1; }
-      .json-tree-key { color: #38bdf8; }
-      .json-tree-colon { color: #94a3b8; padding: 0 4px; }
+      .json-tree-key { color: #f7c76b; }
+      .json-tree-colon { color: #9aa7bd; padding: 0 9px; }
       .json-tree-type { color: #82aaff; }
-      .json-tree-value.string { color: #34d399; }
-      .json-tree-value.number { color: #fbbf24; }
+      .json-tree-value.string { color: #b8e986; }
+      .json-tree-value.number { color: #ff896b; }
       .json-tree-value.boolean { color: #c084fc; }
+      .json-tree-value.null { color: #c084fc; }
       .code-section .copy-btn svg {
         width: 12px;
         height: 12px;
@@ -4839,14 +4844,13 @@
       }
       pre {
         background: #111827;
-        border-radius: 4px;
+        border-radius: 9px;
         color: #dce7f7;
-        font-size: 12px;
-        line-height: 1.55;
+        font: 14px/1.7 monospace;
         margin: 0;
         max-height: calc(Max(86vh, 560px) - 300px);
         overflow: auto;
-        padding: 10px;
+        padding: 12px;
         white-space: pre-wrap;
         word-break: break-all;
         overflow-wrap: anywhere;
