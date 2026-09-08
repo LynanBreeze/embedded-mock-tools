@@ -170,18 +170,52 @@ function openStateDb() {
 
 async function mockResponse(mock) {
   await wait(mock.delay);
-  const headers = new Headers(mock.headers || {});
-  headers.set("x-mocktools-mocked", "1");
-  headers.set("x-mocktools-mock-id", mock.id || "");
+  const status = normalizeResponseStatus(mock.status);
+  const headers = safeMockResponseHeaders(mock);
+  setSafeHeader(headers, "x-mocktools-mocked", "1");
+  setSafeHeader(headers, "x-mocktools-mock-id", mock.id || "");
   if (mock.snapshotted) {
-    headers.set("x-mocktools-snapshotted", "1");
+    setSafeHeader(headers, "x-mocktools-snapshotted", "1");
   }
-  headers.set("Access-Control-Expose-Headers", "x-mocktools-mocked, x-mocktools-mock-id, x-mocktools-snapshotted");
+  setSafeHeader(headers, "Access-Control-Expose-Headers", "x-mocktools-mocked, x-mocktools-mock-id, x-mocktools-snapshotted");
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
-  return new Response(mock.body || "", {
-    status: Number(mock.status || 200),
+  return new Response(responseBodyForStatus(mock.body, status), {
+    status,
     headers
   });
+}
+
+function normalizeResponseStatus(status, fallback = 200) {
+  const numeric = Number(status);
+  return Number.isInteger(numeric) && numeric >= 200 && numeric <= 599 ? numeric : fallback;
+}
+
+function responseBodyForStatus(body, status) {
+  return [204, 205, 304].includes(status) ? null : body || "";
+}
+
+function safeMockResponseHeaders(mock) {
+  const headers = new Headers();
+  const source = mock?.headers;
+  if (!source || typeof source !== "object") return headers;
+  try {
+    if (source instanceof Headers) {
+      source.forEach((value, name) => setSafeHeader(headers, name, value));
+    } else if (Array.isArray(source)) {
+      source.forEach((entry) => {
+        if (Array.isArray(entry) && entry.length >= 2) setSafeHeader(headers, entry[0], entry[1]);
+      });
+    } else {
+      Object.entries(source).forEach(([name, value]) => setSafeHeader(headers, name, value));
+    }
+  } catch (_error) {}
+  return headers;
+}
+
+function setSafeHeader(headers, name, value) {
+  try {
+    headers.set(String(name), String(value));
+  } catch (_error) {}
 }
 
 function findSnapshotResponse(method, url, requestBody = "") {

@@ -160,7 +160,7 @@
       method: (mock.method || "GET").toUpperCase(),
       pattern: mock.pattern || mock.url || "",
       requestBody: typeof mock.requestBody === "string" ? mock.requestBody : "",
-      status: Number(mock.status || 200),
+      status: normalizeResponseStatus(mock.status),
       delay: Number(mock.delay || 0),
       headers: mock.headers || { "content-type": "application/json" },
       body: typeof mock.body === "string" ? mock.body : JSON.stringify(mock.body || {}, null, 2),
@@ -573,53 +573,66 @@
   function installFetchInterceptor() {
     if (!state.originalFetch) return;
     window.fetch = async function interceptedFetch(input, initOptions = {}) {
+      const fetchInit = initOptions == null ? {} : initOptions;
       const startedAt = performance.now();
-      const request = createFetchRecord(input, initOptions);
+      const request = createFetchRecord(input, fetchInit);
       const snapshotMock = shouldLetServiceWorkerMock()
         ? null
         : findSnapshotResponse(request.method, request.url, request.requestBody);
       addRequest(request);
 
       if (snapshotMock && !shouldLetServiceWorkerMock()) {
-        await wait(snapshotMock.delay);
-        const response = new Response(snapshotMock.body, {
-          status: snapshotMock.status,
-          headers: mockResponseHeaders(snapshotMock)
-        });
-        finishRequest(request.id, {
-          status: snapshotMock.status,
-          duration: performance.now() - startedAt,
-          responseHeaders: objectFromHeaders(response.headers),
-          responseText: snapshotMock.body,
-          mocked: true,
-          snapshotted: true,
-          mockId: snapshotMock.id
-        });
-        return response;
+        try {
+          await wait(snapshotMock.delay);
+          const response = createMockResponse(snapshotMock);
+          finishRequest(request.id, {
+            status: normalizeResponseStatus(snapshotMock.status),
+            duration: performance.now() - startedAt,
+            responseHeaders: objectFromHeaders(response.headers),
+            responseText: snapshotMock.body,
+            mocked: true,
+            snapshotted: true,
+            mockId: snapshotMock.id
+          });
+          return response;
+        } catch (error) {
+          finishRequest(request.id, {
+            status: normalizeResponseStatus(snapshotMock.status),
+            duration: performance.now() - startedAt,
+            error: error.message || "Failed to create Mock response"
+          });
+          throw error;
+        }
       }
 
       const mock = shouldLetServiceWorkerMock()
         ? null
         : findMock(request.method, request.url, request.requestBody);
       if (mock && !shouldLetServiceWorkerMock()) {
-        await wait(mock.delay);
-        const response = new Response(mock.body, {
-          status: mock.status,
-          headers: mockResponseHeaders(mock)
-        });
-        finishRequest(request.id, {
-          status: mock.status,
-          duration: performance.now() - startedAt,
-          responseHeaders: objectFromHeaders(response.headers),
-          responseText: mock.body,
-          mocked: true,
-          mockId: mock.id
-        });
-        return response;
+        try {
+          await wait(mock.delay);
+          const response = createMockResponse(mock);
+          finishRequest(request.id, {
+            status: normalizeResponseStatus(mock.status),
+            duration: performance.now() - startedAt,
+            responseHeaders: objectFromHeaders(response.headers),
+            responseText: mock.body,
+            mocked: true,
+            mockId: mock.id
+          });
+          return response;
+        } catch (error) {
+          finishRequest(request.id, {
+            status: normalizeResponseStatus(mock.status),
+            duration: performance.now() - startedAt,
+            error: error.message || "Failed to create Mock response"
+          });
+          throw error;
+        }
       }
 
       try {
-        const response = await state.originalFetch(input, initOptions);
+        const response = await state.originalFetch(input, fetchInit);
         const mocked = response.headers.get("x-mocktools-mocked") === "1";
         const snapshotted = response.headers.get("x-mocktools-snapshotted") === "1";
         const responsePatch = {
@@ -654,11 +667,11 @@
   }
 
   function createFetchRecord(input, initOptions) {
-    const requestLike = input instanceof Request ? input : null;
+    const requestLike = typeof Request !== "undefined" && input instanceof Request ? input : null;
     return {
       id: createId(),
       type: "fetch",
-      method: (initOptions.method || requestLike?.method || "GET").toUpperCase(),
+      method: String(initOptions.method || requestLike?.method || "GET").toUpperCase(),
       url: requestLike?.url || String(input),
       status: "pending",
       startedAt: new Date().toISOString(),
@@ -769,13 +782,15 @@
     wait(mock.delay).then(() => {
       const responseType = getXhrResponseType(xhr);
       const responseHeaders = mockResponseHeaders(mock);
-      const response = mockXhrResponseBody(mock.body, responseType, responseHeaders);
+      const status = normalizeResponseStatus(mock.status);
+      const body = responseBodyForStatus(mock.body, status);
+      const response = mockXhrResponseBody(body, responseType, responseHeaders);
       defineReadonly(xhr, "readyState", 4);
-      defineReadonly(xhr, "status", mock.status);
-      defineReadonly(xhr, "statusText", statusText(mock.status));
+      defineReadonly(xhr, "status", status);
+      defineReadonly(xhr, "statusText", statusText(status));
       defineReadonly(xhr, "response", response);
       if (responseType === "" || responseType === "text") {
-        defineReadonly(xhr, "responseText", mock.body);
+        defineReadonly(xhr, "responseText", body);
       }
       xhr.getAllResponseHeaders = () =>
         Object.entries(Object.fromEntries(responseHeaders.entries()))
@@ -783,7 +798,7 @@
           .join("\r\n");
       xhr.getResponseHeader = (name) => responseHeaders.get(name);
       finishRequest(requestId, {
-        status: mock.status,
+        status,
         duration: performance.now() - startTime,
         responseHeaders: Object.fromEntries(responseHeaders.entries()),
         responseText: readXhrResponseBody(xhr),
@@ -794,15 +809,65 @@
       xhr.dispatchEvent(new Event("readystatechange"));
       xhr.dispatchEvent(new Event("load"));
       xhr.dispatchEvent(new Event("loadend"));
+    }).catch((error) => {
+      finishRequest(requestId, {
+        status: normalizeResponseStatus(mock?.status),
+        duration: performance.now() - startTime,
+        error: error?.message || "Failed to create Mock XHR response"
+      });
+      try {
+        xhr.dispatchEvent(new Event("error"));
+        xhr.dispatchEvent(new Event("loadend"));
+      } catch (_eventError) {}
     });
   }
 
   function mockResponseHeaders(mock) {
-    const headers = new Headers(mock.headers || {});
-    headers.set("x-mocktools-mocked", "1");
-    headers.set("x-mocktools-mock-id", mock.id || "");
-    if (mock.snapshotted) headers.set("x-mocktools-snapshotted", "1");
+    const headers = new Headers();
+    appendSafeHeaders(headers, mock?.headers);
+    setSafeHeader(headers, "x-mocktools-mocked", "1");
+    setSafeHeader(headers, "x-mocktools-mock-id", mock?.id || "");
+    if (mock?.snapshotted) setSafeHeader(headers, "x-mocktools-snapshotted", "1");
+    if (!headers.has("content-type")) headers.set("content-type", "application/json");
     return headers;
+  }
+
+  function createMockResponse(mock) {
+    const status = normalizeResponseStatus(mock?.status);
+    return new Response(responseBodyForStatus(mock?.body, status), {
+      status,
+      headers: mockResponseHeaders(mock)
+    });
+  }
+
+  function normalizeResponseStatus(status, fallback = 200) {
+    const numeric = Number(status);
+    return Number.isInteger(numeric) && numeric >= 200 && numeric <= 599 ? numeric : fallback;
+  }
+
+  function responseBodyForStatus(body, status) {
+    return [204, 205, 304].includes(status) ? null : body || "";
+  }
+
+  function appendSafeHeaders(headers, source) {
+    if (!source || typeof source !== "object") return;
+    try {
+      if (source instanceof Headers) {
+        source.forEach((value, name) => setSafeHeader(headers, name, value));
+      } else if (Array.isArray(source)) {
+        source.forEach((entry) => {
+          if (Array.isArray(entry) && entry.length >= 2) setSafeHeader(headers, entry[0], entry[1]);
+        });
+      } else {
+        Object.entries(source).forEach(([name, value]) => setSafeHeader(headers, name, value));
+      }
+    } catch (_error) {}
+  }
+
+  function setSafeHeader(headers, name, value) {
+    try {
+      headers.set(String(name), String(value));
+    } catch (_error) {}
   }
 
   function defineReadonly(target, key, value) {
@@ -2064,7 +2129,12 @@
       button.addEventListener("click", () => {
         const pre = button.parentElement?.querySelector("pre");
         if (pre) {
-          navigator.clipboard.writeText(pre.textContent).then(() => {
+          const clipboard = navigator.clipboard;
+          if (!clipboard || typeof clipboard.writeText !== "function") {
+            console.warn("Clipboard API is unavailable in this context.");
+            return;
+          }
+          Promise.resolve().then(() => clipboard.writeText(pre.textContent || "")).then(() => {
             button.classList.add("copied");
             setTimeout(() => {
               button.classList.remove("copied");
@@ -2437,7 +2507,7 @@
             requestBody: lastResp ? lastResp.requestBody || "" : "",
             status: lastResp ? lastResp.status : 200,
             delay: lastResp ? lastResp.delay : 0,
-            headers: lastResp ? JSON.parse(JSON.stringify(lastResp.headers)) : { "content-type": "application/json" },
+            headers: cloneHeaders(lastResp?.headers),
             body: lastResp ? lastResp.body : "{}"
           });
           notify();
@@ -2453,7 +2523,7 @@
         if (state.editingSnapshotDraft && !isNaN(ruleIdx) && !isNaN(stepIdx) && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx]) {
           let val = e.target.value;
           if (field === "status" || field === "delay") {
-            val = Number(val || 0);
+            val = field === "status" ? normalizeResponseStatus(val) : Number(val || 0);
           } else if (field === "headers") {
             const currentStep = state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx];
             val = parseHeadersInput(val, currentStep.headers || {});
@@ -2678,7 +2748,7 @@
       if (!isNaN(ruleIdx) && !isNaN(stepIdx) && state.editingSnapshotDraft.rules[ruleIdx] && state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx] && field) {
         let val = el.value;
         if (field === "status" || field === "delay") {
-          val = Number(val || 0);
+          val = field === "status" ? normalizeResponseStatus(val) : Number(val || 0);
         } else if (field === "headers") {
           const currentStep = state.editingSnapshotDraft.rules[ruleIdx].responses[stepIdx];
           val = parseHeadersInput(val, currentStep.headers || {});
@@ -2714,7 +2784,7 @@
       enabled: wantsActive,
       method: methodField ? methodField.value.toUpperCase() : currentMock.method,
       pattern: patternField ? patternField.value : currentMock.pattern,
-      status: Number(getField("status")?.value || 200),
+      status: normalizeResponseStatus(getField("status")?.value),
       delay: Number(getField("delay")?.value || 0),
       headers,
       body: getField("body")?.value || ""
@@ -2894,7 +2964,8 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `mocktools-snapshot-${snap.name.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
+    const snapshotName = String(snap.name || "snapshot");
+    link.download = `mocktools-snapshot-${snapshotName.replace(/[^a-zA-Z0-9]/g, "_")}-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -6172,9 +6243,9 @@
   function stringifyBody(body) {
     if (!body) return "";
     if (typeof body === "string") return body;
-    if (body instanceof URLSearchParams) return body.toString();
-    if (body instanceof FormData) return "[FormData]";
-    if (body instanceof Blob) return `[Blob ${body.type || "unknown"}]`;
+    if (typeof URLSearchParams !== "undefined" && body instanceof URLSearchParams) return body.toString();
+    if (typeof FormData !== "undefined" && body instanceof FormData) return "[FormData]";
+    if (typeof Blob !== "undefined" && body instanceof Blob) return `[Blob ${body.type || "unknown"}]`;
     try {
       return JSON.stringify(body, null, 2);
     } catch (_error) {
@@ -6286,6 +6357,18 @@
       return JSON.parse(value);
     } catch (_error) {
       return fallback;
+    }
+  }
+
+  function cloneHeaders(headers) {
+    if (!headers || typeof headers !== "object") return { "content-type": "application/json" };
+    try {
+      const cloned = JSON.parse(JSON.stringify(headers));
+      return cloned && typeof cloned === "object" && !Array.isArray(cloned)
+        ? cloned
+        : { "content-type": "application/json" };
+    } catch (_error) {
+      return { "content-type": "application/json" };
     }
   }
 
