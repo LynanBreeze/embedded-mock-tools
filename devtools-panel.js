@@ -745,7 +745,7 @@
             status: xhr.status || 0,
             duration: performance.now() - meta.startTime,
             responseHeaders: parseRawHeaders(xhr.getAllResponseHeaders()),
-            responseText: String(xhr.responseText || ""),
+            responseText: readXhrResponseBody(xhr),
             mocked: xhr.getResponseHeader("x-mocktools-mocked") === "1",
             snapshotted: xhr.getResponseHeader("x-mocktools-snapshotted") === "1",
             mockId: xhr.getResponseHeader("x-mocktools-mock-id") || ""
@@ -767,12 +767,16 @@
 
   function respondWithMockXhr(xhr, requestId, mock, startTime) {
     wait(mock.delay).then(() => {
+      const responseType = getXhrResponseType(xhr);
+      const responseHeaders = mockResponseHeaders(mock);
+      const response = mockXhrResponseBody(mock.body, responseType, responseHeaders);
       defineReadonly(xhr, "readyState", 4);
       defineReadonly(xhr, "status", mock.status);
       defineReadonly(xhr, "statusText", statusText(mock.status));
-      defineReadonly(xhr, "response", mock.body);
-      defineReadonly(xhr, "responseText", mock.body);
-      const responseHeaders = mockResponseHeaders(mock);
+      defineReadonly(xhr, "response", response);
+      if (responseType === "" || responseType === "text") {
+        defineReadonly(xhr, "responseText", mock.body);
+      }
       xhr.getAllResponseHeaders = () =>
         Object.entries(Object.fromEntries(responseHeaders.entries()))
           .map(([key, value]) => `${key}: ${value}`)
@@ -782,7 +786,7 @@
         status: mock.status,
         duration: performance.now() - startTime,
         responseHeaders: Object.fromEntries(responseHeaders.entries()),
-        responseText: mock.body,
+        responseText: readXhrResponseBody(xhr),
         mocked: true,
         mockId: mock.id,
         snapshotted: !!mock.snapshotted
@@ -805,8 +809,59 @@
     try {
       Object.defineProperty(target, key, { configurable: true, value });
     } catch (_error) {
-      target[key] = value;
+      try {
+        target[key] = value;
+      } catch (_assignmentError) {}
     }
+  }
+
+  function getXhrResponseType(xhr) {
+    try {
+      return String(xhr.responseType || "").toLowerCase();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function readXhrResponseBody(xhr) {
+    const responseType = getXhrResponseType(xhr);
+    if (responseType === "blob" || responseType === "arraybuffer") {
+      return "[binary response]";
+    }
+    if (responseType === "json") {
+      try {
+        const response = xhr.response;
+        return response === null || response === undefined
+          ? ""
+          : typeof response === "string" ? response : JSON.stringify(response);
+      } catch (_error) {
+        return "[unreadable response]";
+      }
+    }
+    if (responseType && responseType !== "text") return "[unreadable response]";
+    try {
+      return String(xhr.responseText || "");
+    } catch (_error) {
+      return "[unreadable response]";
+    }
+  }
+
+  function mockXhrResponseBody(body, responseType, headers) {
+    const text = String(body || "");
+    if (responseType === "blob") {
+      return new Blob([text], { type: headers.get("content-type") || "" });
+    }
+    if (responseType === "arraybuffer") {
+      return new TextEncoder().encode(text).buffer;
+    }
+    if (responseType === "json") {
+      try {
+        return JSON.parse(text);
+      } catch (_error) {
+        return null;
+      }
+    }
+    return text;
   }
 
   function addRequest(request) {
