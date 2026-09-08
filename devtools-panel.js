@@ -1956,6 +1956,10 @@
             parsed = JSON.parse(source.replace(/([{,]\s*)([A-Za-z_$][\w$-]*)\s*:/g, '$1"$2":'));
           }
           field.value = JSON.stringify(parsed, null, 2);
+          // Formatting happens after the textarea may already have blurred.
+          // Persist the formatted value explicitly so the next render does not
+          // restore the pre-format raw value from state.mocks.
+          field.dispatchEvent(new Event("change", { bubbles: true }));
           button.textContent = "Formatted!";
           button.classList.add("format-success");
           button.disabled = true;
