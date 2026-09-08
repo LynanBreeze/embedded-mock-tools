@@ -3544,14 +3544,16 @@
     const selectionMode = state.mockGroupSelectionMode ? " selection-active" : "";
     const checked = state.selectedMockGroupKeys.has(group.key);
     const selected = checked ? " selected" : "";
+    const hasPayloadMatch = hasRequestPayloadMatch(group.requestBody);
+    const payloadMatch = hasPayloadMatch ? " has-payload-match" : "";
     const endpointLabel = `${group.method} ${formatPathDisplay(group.pattern) || "(empty pattern)"}`;
     return `
-      <button class="mock-row${active}${enabled}${selectionMode}${selected}" type="button" data-select-endpoint="${escapeAttr(group.key)}">
+      <button class="mock-row${active}${enabled}${selectionMode}${selected}${payloadMatch}" type="button" data-select-endpoint="${escapeAttr(group.key)}"${hasPayloadMatch ? ' title="Matches request payload"' : ""}>
         ${state.mockGroupSelectionMode ? `<input type="checkbox" class="row-select-checkbox" data-toggle-mock-group-selection="${escapeAttr(group.key)}" ${checked ? "checked" : ""} />` : ""}
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
           <strong>${escapeHtml(group.aliasName || endpointLabel)}</strong>
-          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${group.requestBody ? ", body match" : ""}</em>
+          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${hasPayloadMatch ? `, <span class="payload-match-badge">PAYLOAD</span>` : ""}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
         <label class="toggle rule-toggle" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
@@ -5072,6 +5074,21 @@
       .mock-row:hover, .mock-row.active {
         background: #eaf2ff;
       }
+      .payload-match-badge {
+        background: #fffaf0;
+        border: 1px solid #f6d9a8;
+        border-radius: 3px;
+        color: #a16207;
+        display: inline-block;
+        font-size: 8px;
+        font-style: normal;
+        font-weight: 700;
+        letter-spacing: .03em;
+        line-height: 1.3;
+        margin-left: 3px;
+        padding: 1px 3px;
+        vertical-align: 1px;
+      }
       .mock-row.selection-active {
         grid-template-columns: 16px 10px minmax(0, 1fr) 42px 28px;
       }
@@ -6522,6 +6539,10 @@
   function mockActivationKey(mock) {
     const bodyKey = mock.requestBody ? normalizePayloadKey(mock.requestBody) : "*";
     return `${endpointKey(mock.method, mock.pattern)}::${bodyKey}`;
+  }
+
+  function hasRequestPayloadMatch(requestBody) {
+    return Boolean(normalizePayloadKey(requestBody));
   }
 
   function getMockGroups(mocks = state.mocks) {
