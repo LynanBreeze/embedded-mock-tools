@@ -4327,7 +4327,7 @@
       }
       .devtools {
         background: #f7f9fc;
-        border: 1px solid #cdd7e6;
+        border: 0;
         border-radius: 8px 8px 0 0;
         bottom: 0;
         box-shadow: 0 -18px 50px rgba(10, 20, 40, .24);
@@ -5998,7 +5998,7 @@
       .float-button:hover { background: linear-gradient(135deg, #334155, #475569); }
       .devtools {
         background: var(--panel-canvas);
-        border: 1px solid #cfd8e6;
+        border: 0;
         border-radius: 8px 8px 0 0;
         box-shadow: 0 -24px 70px rgba(15,23,42,.22);
         height: 94vh;
