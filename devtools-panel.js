@@ -4040,7 +4040,7 @@
           </div>
         </div>
         <label>Config name
-          <input value="${escapeAttr(mock.name || "")}" placeholder="${escapeAttr(`${mock.method} ${mock.pattern}`)}" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
+          <input value="${escapeAttr(mock.name || "")}" placeholder="Please Enter" data-mock-id="${escapeAttr(mock.id)}" data-mock-field="name" />
         </label>
         <div class="pair">
           <div class="inline-style-ef1f3a5d">
