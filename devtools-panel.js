@@ -3616,7 +3616,7 @@
           <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${hasPayloadMatch ? `, <span class="payload-match-badge">PAYLOAD</span>` : ""}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
-        <label class="toggle rule-toggle" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
+        <label class="toggle rule-toggle row-toggle-zone" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
           <input type="checkbox" data-toggle-mock-group="${escapeAttr(group.key)}" ${group.activeMock ? "checked" : ""} />
           <span class="switch" aria-hidden="true"></span>
         </label>
@@ -3640,7 +3640,7 @@
           <em>${snapshot.rules.length} rule${snapshot.rules.length === 1 ? "" : "s"}, ${totalSteps} step${totalSteps === 1 ? "" : "s"}</em>
         </span>
         <span></span>
-        <label class="toggle snapshot-toggle inline-style-7c61589b" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
+        <label class="toggle snapshot-toggle row-toggle-zone inline-style-7c61589b" title="Activate/Deactivate Snapshot" onclick="event.stopPropagation()">
           <input type="checkbox" data-toggle-snapshot-item="${escapeAttr(snapshot.id)}" ${enabled ? "checked" : ""} />
           <span class="switch" aria-hidden="true"></span>
         </label>
@@ -5222,6 +5222,13 @@
         gap: 0;
         justify-content: flex-end;
       }
+      .mock-row > .row-toggle-zone {
+        align-self: stretch;
+        cursor: pointer;
+        height: calc(100% + 14px);
+        justify-self: stretch;
+        margin: -7px 0;
+      }
       .mock-card {
         border: 1px solid #d9e1ee;
         border-radius: 8px;
@@ -6151,6 +6158,10 @@
       .mock-list { background: #fbfcfe; border-bottom-color: var(--panel-line); min-height: 0; height: 100%; }
       .mock-row { border-bottom-color: #eef2f7; height: 50px; min-height: 50px; padding: 8px 14px; }
       .mock-row:hover, .mock-row.active { background: #f1f4f8; }
+      .mock-row > .row-toggle-zone {
+        height: calc(100% + 16px);
+        margin: -8px 0;
+      }
       .mock-detail { padding: 16px; }
       .endpoint-title, .mock-card { border-color: #dfe6f0; border-radius: 6px; }
       .endpoint-title { background: #fbfdff; padding: 10px; margin-bottom: 6px; }
