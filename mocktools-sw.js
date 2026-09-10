@@ -176,8 +176,11 @@ async function mockResponse(mock) {
   setSafeHeader(headers, "x-mocktools-mock-id", mock.id || "");
   if (mock.snapshotted) {
     setSafeHeader(headers, "x-mocktools-snapshotted", "1");
+    if (Number.isInteger(mock.snapshotStepIdx) && mock.snapshotStepIdx >= 0) {
+      setSafeHeader(headers, "x-mocktools-snapshot-step", String(mock.snapshotStepIdx));
+    }
   }
-  setSafeHeader(headers, "Access-Control-Expose-Headers", "x-mocktools-mocked, x-mocktools-mock-id, x-mocktools-snapshotted");
+  setSafeHeader(headers, "Access-Control-Expose-Headers", "x-mocktools-mocked, x-mocktools-mock-id, x-mocktools-snapshotted, x-mocktools-snapshot-step");
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
   return new Response(responseBodyForStatus(mock.body, status), {
     status,
@@ -299,7 +302,8 @@ function findSnapshotResponse(method, url, requestBody = "") {
     delay: response.delay,
     headers: response.headers,
     body: response.body,
-    snapshotted: true
+    snapshotted: true,
+    snapshotStepIdx: selectedRule.responses.indexOf(response)
   };
 }
 

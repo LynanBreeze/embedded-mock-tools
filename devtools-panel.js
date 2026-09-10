@@ -56,7 +56,9 @@
     editingSnapshotId: null,
     editingSnapshotDraft: null,
     selectedSnapshotRuleIdx: 0,
+    selectedSnapshotStepIdx: null,
     pendingSnapshotRuleScrollId: null,
+    pendingSnapshotStepScroll: null,
     buttonPosition: null,
     savedSnapshotId: null
     ,jsonTreeSections: new Set()
@@ -592,7 +594,8 @@
             responseText: snapshotMock.body,
             mocked: true,
             snapshotted: true,
-            mockId: snapshotMock.id
+            mockId: snapshotMock.id,
+            snapshotStepIdx: snapshotMock.snapshotStepIdx
           });
           return response;
         } catch (error) {
@@ -641,7 +644,8 @@
           responseHeaders: objectFromHeaders(response.headers),
           mocked,
           snapshotted,
-          mockId: response.headers.get("x-mocktools-mock-id") || ""
+          mockId: response.headers.get("x-mocktools-mock-id") || "",
+          snapshotStepIdx: parseSnapshotStepIndex(response.headers.get("x-mocktools-snapshot-step"))
         };
 
         // A passthrough response is complete as soon as fetch resolves. Some
@@ -681,6 +685,7 @@
       responseHeaders: {},
       responseText: "",
       mocked: false,
+      snapshotStepIdx: null,
       error: ""
     };
   }
@@ -733,6 +738,7 @@
           responseHeaders: {},
           responseText: "",
           mocked: false,
+          snapshotStepIdx: null,
           error: ""
         };
         const snapshotMock = shouldLetServiceWorkerMock()
@@ -761,7 +767,8 @@
             responseText: readXhrResponseBody(xhr),
             mocked: xhr.getResponseHeader("x-mocktools-mocked") === "1",
             snapshotted: xhr.getResponseHeader("x-mocktools-snapshotted") === "1",
-            mockId: xhr.getResponseHeader("x-mocktools-mock-id") || ""
+            mockId: xhr.getResponseHeader("x-mocktools-mock-id") || "",
+            snapshotStepIdx: parseSnapshotStepIndex(xhr.getResponseHeader("x-mocktools-snapshot-step"))
           });
         });
         xhr.addEventListener("error", () => {
@@ -804,7 +811,8 @@
         responseText: readXhrResponseBody(xhr),
         mocked: true,
         mockId: mock.id,
-        snapshotted: !!mock.snapshotted
+        snapshotted: !!mock.snapshotted,
+        snapshotStepIdx: mock.snapshotted ? mock.snapshotStepIdx : null
       });
       xhr.dispatchEvent(new Event("readystatechange"));
       xhr.dispatchEvent(new Event("load"));
@@ -827,7 +835,12 @@
     appendSafeHeaders(headers, mock?.headers);
     setSafeHeader(headers, "x-mocktools-mocked", "1");
     setSafeHeader(headers, "x-mocktools-mock-id", mock?.id || "");
-    if (mock?.snapshotted) setSafeHeader(headers, "x-mocktools-snapshotted", "1");
+    if (mock?.snapshotted) {
+      setSafeHeader(headers, "x-mocktools-snapshotted", "1");
+      if (Number.isInteger(mock.snapshotStepIdx) && mock.snapshotStepIdx >= 0) {
+        setSafeHeader(headers, "x-mocktools-snapshot-step", String(mock.snapshotStepIdx));
+      }
+    }
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
     return headers;
   }
@@ -1029,8 +1042,15 @@
       body: response.body || "",
       id: selectedRule.id,
       mocked: true,
-      snapshotted: true
+      snapshotted: true,
+      snapshotStepIdx: selectedRule.responses.indexOf(response)
     };
+  }
+
+  function parseSnapshotStepIndex(value) {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const stepIdx = Number(value);
+    return Number.isInteger(stepIdx) && stepIdx >= 0 ? stepIdx : null;
   }
 
   function isPayloadMethod(method) {
@@ -1394,6 +1414,7 @@
         if (el) el.scrollTop = scrollPositions[selector];
       });
       scrollPendingSnapshotRuleIntoView(root);
+      scrollPendingSnapshotStepIntoView(root);
 
       root.querySelectorAll("textarea").forEach((ta, idx) => {
         const id = ta.getAttribute("data-snapshot-field")
@@ -1453,6 +1474,27 @@
       nav.scrollTop += itemRect.top - navRect.top - padding;
     } else if (itemRect.bottom > navRect.bottom - padding) {
       nav.scrollTop += itemRect.bottom - navRect.bottom + padding;
+    }
+  }
+
+  function scrollPendingSnapshotStepIntoView(root) {
+    const pending = state.pendingSnapshotStepScroll;
+    if (!pending) return;
+    state.pendingSnapshotStepScroll = null;
+
+    const detail = root.querySelector(".snapshot-rule-detail");
+    const item = detail?.querySelector(
+      `[data-snapshot-step-card="${pending.ruleIdx}-${pending.stepIdx}"]`
+    );
+    if (!detail || !item) return;
+
+    const padding = 8;
+    const detailRect = detail.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    if (itemRect.top < detailRect.top + padding) {
+      detail.scrollTop += itemRect.top - detailRect.top - padding;
+    } else if (itemRect.bottom > detailRect.bottom - padding) {
+      detail.scrollTop += itemRect.bottom - detailRect.bottom + padding;
     }
   }
 
@@ -1839,6 +1881,14 @@
             if (ruleIdx !== -1) {
               state.selectedSnapshotRuleIdx = ruleIdx;
               state.pendingSnapshotRuleScrollId = sourceId;
+              const stepIdx = parseSnapshotStepIndex(item.getAttribute("data-snapshot-step-idx"));
+              const responseCount = Array.isArray(snapshot.rules[ruleIdx].responses)
+                ? snapshot.rules[ruleIdx].responses.length
+                : 0;
+              state.selectedSnapshotStepIdx = stepIdx !== null && stepIdx < responseCount ? stepIdx : null;
+              state.pendingSnapshotStepScroll = state.selectedSnapshotStepIdx === null
+                ? null
+                : { ruleIdx, stepIdx: state.selectedSnapshotStepIdx };
             }
             notify();
           }
@@ -2440,6 +2490,8 @@
         const ruleIdx = parseInt(button.getAttribute("data-select-snapshot-rule-idx"), 10);
         if (!isNaN(ruleIdx)) {
           state.selectedSnapshotRuleIdx = ruleIdx;
+          state.selectedSnapshotStepIdx = null;
+          state.pendingSnapshotStepScroll = null;
           notify();
         }
       });
@@ -2644,6 +2696,8 @@
         state.editingMockId = null;
         state.editingSnapshotId = null;
         state.editingSnapshotDraft = null;
+        state.selectedSnapshotStepIdx = null;
+        state.pendingSnapshotStepScroll = null;
         notify();
       });
     });
@@ -3191,6 +3245,8 @@
     state.activeSnapshotId = null;
     state.editingSnapshotId = null;
     state.editingSnapshotDraft = null;
+    state.selectedSnapshotStepIdx = null;
+    state.pendingSnapshotStepScroll = null;
     state.mockEnabled = true;
     state.activeRightTab = "mocks";
     state.mockGroupSelectionMode = false;
@@ -3606,6 +3662,9 @@
     }
     state.selectedSnapshotRuleIdx = activeRuleIdx;
     const activeRule = rules[activeRuleIdx] || null;
+    const selectedStepIdx = activeRuleIdx === state.selectedSnapshotRuleIdx
+      ? state.selectedSnapshotStepIdx
+      : null;
 
     // Build Left Column Nav Items
     const rulesNavHtml = rules.map((rule, ruleIdx) => {
@@ -3637,9 +3696,9 @@
         const isBodyCollapsed = state.collapsedSections.has(bodyTitle);
 
         return `
-          <div class="step-card inline-style-3c130608">
+          <div class="step-card${stepIdx === selectedStepIdx ? " is-selected" : ""} inline-style-3c130608" data-snapshot-step-card="${activeRuleIdx}-${stepIdx}">
             <div class="inline-style-2898cf4e">
-              <span class="inline-style-001f330c">Step ${stepNum}</span>
+              <span class="inline-style-001f330c">Step ${stepNum}${stepIdx === selectedStepIdx ? " <em class=\"snapshot-step-match\">Matched</em>" : ""}</span>
               <div class="snapshot-step-actions">
                 <span class="snapshot-preset-label">Preset</span>
                 <button type="button" class="snapshot-preset-btn" data-snapshot-template="200" data-rule-idx="${activeRuleIdx}" data-step-idx="${stepIdx}">200 OK</button>
@@ -3926,6 +3985,9 @@
 
   function detailTemplate(request) {
     const source = requestDetailSource(request);
+    const snapshotLabel = source.snapshotted && source.snapshotStepIdx !== null && source.snapshotStepCount > 1
+      ? `Snapshotted · Step ${source.snapshotStepIdx + 1}`
+      : "Snapshotted";
     return `
       <div class="detail-title">
         <span>${escapeHtml(request.method)}</span>
@@ -3935,7 +3997,7 @@
         <span>Status: <strong class="${statusClass(request.status)} inline-style-42acb60e">${escapeHtml(String(request.status))}</strong></span>
         <span>Type: ${escapeHtml(request.type)}</span>
         ${source.linkable && source.mockId
-          ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(source.mockId)}" data-source-type="${source.snapshotted ? "snapshot" : "mock"}" title="View ${source.snapshotted ? "snapshot config" : "mock rule"}">${source.snapshotted ? "Snapshotted" : "Mocked"} ↗</button>`
+          ? `<button class="source-link" type="button" data-navigate-to-source="${escapeAttr(source.mockId)}" data-source-type="${source.snapshotted ? "snapshot" : "mock"}"${source.snapshotted && source.snapshotStepIdx !== null ? ` data-snapshot-step-idx="${source.snapshotStepIdx}"` : ""} title="View ${source.snapshotted ? "snapshot config" : "mock rule"}">${source.snapshotted ? snapshotLabel : "Mocked"} ↗</button>`
           : `<span>${source.snapshotted ? "Snapshotted" : source.mocked ? "Mocked" : "Passthrough"}</span>`
         }
         <span>${Math.round(request.duration)}ms</span>
@@ -5857,6 +5919,9 @@
       .inline-style-5b62b5f4 { font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; font-family: monospace; }
       .inline-style-3da7d443 { font-size: 10px; color: #64748b; margin-left: 2px; }
       .inline-style-3c130608 { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fff; }
+      .step-card.is-selected { border-color: #a78bfa; background: #faf5ff; box-shadow: 0 0 0 2px rgba(139,92,246,.14); }
+      .step-card.is-selected .inline-style-001f330c { color: #6d28d9; }
+      .snapshot-step-match { color: #7c3aed; font-size: 9px; font-style: normal; font-weight: 700; margin-left: 6px; text-transform: uppercase; letter-spacing: .04em; }
       .inline-style-2898cf4e { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
       .inline-style-001f330c { font-size: 11px; font-weight: 700; color: #475569; }
       .inline-style-a90c3ad4 { display: flex; gap: 6px; margin-bottom: 6px; }
@@ -6427,6 +6492,8 @@
 
   function startEditingSnapshot(id) {
     const original = state.snapshots.find(s => String(s.id) === String(id));
+    state.selectedSnapshotStepIdx = null;
+    state.pendingSnapshotStepScroll = null;
     if (original) {
       state.editingSnapshotDraft = JSON.parse(JSON.stringify(original));
       state.selectedSnapshotRuleIdx = 0;
@@ -6523,11 +6590,23 @@
     const snapshotted = Boolean(request.snapshotted);
     const mocked = Boolean(request.mocked || snapshotted);
     let linkable = false;
+    let snapshotStepIdx = null;
+    let snapshotStepCount = 0;
 
     if (snapshotted && mockId) {
-      linkable = state.snapshots.some((snapshot) =>
-        Array.isArray(snapshot.rules) && snapshot.rules.some((rule) => rule.id === mockId)
-      );
+      for (const snapshot of state.snapshots) {
+        const rule = Array.isArray(snapshot.rules)
+          ? snapshot.rules.find((entry) => String(entry.id) === String(mockId))
+          : null;
+        if (!rule) continue;
+        linkable = true;
+        snapshotStepCount = Array.isArray(rule.responses) ? rule.responses.length : 0;
+        const stepIdx = parseSnapshotStepIndex(request.snapshotStepIdx);
+        if (stepIdx !== null && Array.isArray(rule.responses) && stepIdx < rule.responses.length) {
+          snapshotStepIdx = stepIdx;
+        }
+        break;
+      }
     } else if (request.mocked && mockId) {
       linkable = state.mocks.some((mock) => mock.id === mockId);
     }
@@ -6535,6 +6614,8 @@
     return {
       mocked,
       snapshotted,
+      snapshotStepIdx,
+      snapshotStepCount,
       mockId: linkable ? mockId : "",
       linkable
     };

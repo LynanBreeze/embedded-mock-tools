@@ -124,6 +124,7 @@ When a Snapshot is enabled, it takes precedence over normal Mock rules. When dis
 - `x-mocktools-mocked: 1`
 - `x-mocktools-snapshotted: 1` (Snapshot response)
 - `x-mocktools-mock-id: <id>`
+- `x-mocktools-snapshot-step: <zero-based step index>` (Snapshot response step)
 
 ## JavaScript API
 
