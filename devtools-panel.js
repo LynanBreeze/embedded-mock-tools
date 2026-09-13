@@ -1805,6 +1805,7 @@
       state.selectedMockGroupKeys.clear();
       notify();
     });
+    root.querySelector("[data-export-selected-mock-groups]")?.addEventListener("click", exportSelectedMockGroups);
     root.querySelector("[data-delete-selected-mock-groups]")?.addEventListener("click", deleteSelectedMockGroups);
     root.querySelector("[data-start-snapshot-selection]")?.addEventListener("click", () => {
       state.snapshotListSelectionMode = true;
@@ -2912,6 +2913,35 @@
     openConfirmDialog("mock-groups", Array.from(selectedKeys), `Delete ${selectedKeys.size} selected mock rule${selectedKeys.size === 1 ? "" : "s"}?`);
   }
 
+  function exportSelectedMockGroups() {
+    const selectedKeys = new Set(state.selectedMockGroupKeys);
+    if (!selectedKeys.size) return;
+
+    const selectedMocks = state.mocks.filter((mock) => selectedKeys.has(mockActivationKey(mock)));
+    if (!selectedMocks.length) return;
+
+    const payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      mocks: selectedMocks
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mocktools-rules-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    state.mockGroupSelectionMode = false;
+    state.selectedMockGroupKeys.clear();
+    notify();
+  }
+
   function deleteMockById(id) {
     const targetMock = state.mocks.find((mock) => mock.id === id);
     if (!targetMock) return;
@@ -3528,6 +3558,7 @@
                         <button type="button" class="mini-btn inline-style-32b56291" data-deselect-all-mock-groups ${state.selectedMockGroupKeys.size ? "" : "disabled"}>None</button>
                       </div>
                       <div class="inline-style-4b3bf9f6">
+                        <button type="button" data-export-selected-mock-groups title="Export selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"} class="bulk-export-btn">Export ${state.selectedMockGroupKeys.size || ""}</button>
                         <button type="button" data-delete-selected-mock-groups title="Delete selected mock rule groups" ${state.selectedMockGroupKeys.size ? "" : "disabled"} class="inline-style-eb42bfe7">Delete ${state.selectedMockGroupKeys.size || ""}</button>
                         <button type="button" data-cancel-mock-selection class="inline-style-c2a44570">Cancel</button>
                       </div>
@@ -5218,6 +5249,21 @@
         background: #b91c1c;
         border-color: #b91c1c;
         color: #fff;
+      }
+      .mock-head-actions .bulk-export-btn {
+        background: #10b981;
+        border: 1px solid #10b981;
+        border-radius: 4px;
+        color: #fff;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+      }
+      .mock-head-actions .bulk-export-btn:hover:not(:disabled) {
+        background: #059669;
+        border-color: #059669;
       }
       .mock-layout {
         display: grid;
