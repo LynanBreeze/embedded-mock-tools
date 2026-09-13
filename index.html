@@ -24,6 +24,8 @@
           <button id="xhrOrders" type="button">XHR /api/orders</button>
           <button id="fetchHealth" type="button">Fetch /api/health</button>
           <button id="fetchTodo" type="button">GET /todos/1</button>
+          <button id="downloadBlob" type="button">Download JS Blob</button>
+          <button id="downloadZipBlob" type="button">Download ZIP Blob</button>
           <button id="clearLog" type="button" class="secondary">Clear Logs</button>
         </div>
       </section>
@@ -117,7 +119,7 @@
       </section>
     </main>
 
-    <script src="./devtools-panel.js?v=1.0.33"></script>
+    <script src="./devtools-panel.js?v=1.0.34"></script>
     <script>
       window.MockTools.init({
         buttonPosition: "bottom-left",
@@ -211,6 +213,54 @@
         return item;
       };
 
+      const createZipBlob = (filename, content) => {
+        const encoder = new TextEncoder();
+        const filenameBytes = encoder.encode(filename);
+        const fileBytes = encoder.encode(content);
+        let crc = 0xffffffff;
+
+        for (const byte of fileBytes) {
+          crc ^= byte;
+          for (let bit = 0; bit < 8; bit += 1) {
+            crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+          }
+        }
+        crc = (crc ^ 0xffffffff) >>> 0;
+
+        const localHeader = new Uint8Array(30);
+        const localView = new DataView(localHeader.buffer);
+        localView.setUint32(0, 0x04034b50, true);
+        localView.setUint16(4, 20, true);
+        localView.setUint32(14, crc, true);
+        localView.setUint32(18, fileBytes.length, true);
+        localView.setUint32(22, fileBytes.length, true);
+        localView.setUint16(26, filenameBytes.length, true);
+
+        const centralHeader = new Uint8Array(46);
+        const centralView = new DataView(centralHeader.buffer);
+        centralView.setUint32(0, 0x02014b50, true);
+        centralView.setUint16(4, 20, true);
+        centralView.setUint16(6, 20, true);
+        centralView.setUint32(16, crc, true);
+        centralView.setUint32(20, fileBytes.length, true);
+        centralView.setUint32(24, fileBytes.length, true);
+        centralView.setUint16(28, filenameBytes.length, true);
+        centralView.setUint32(42, 0, true);
+
+        const endRecord = new Uint8Array(22);
+        const endView = new DataView(endRecord.buffer);
+        endView.setUint32(0, 0x06054b50, true);
+        endView.setUint16(8, 1, true);
+        endView.setUint16(10, 1, true);
+        endView.setUint32(12, centralHeader.length + filenameBytes.length, true);
+        endView.setUint32(16, localHeader.length + filenameBytes.length + fileBytes.length, true);
+
+        return new Blob(
+          [localHeader, filenameBytes, fileBytes, centralHeader, filenameBytes, endRecord],
+          { type: "application/zip" }
+        );
+      };
+
       const escapeHtml = (value) =>
         String(value).replace(/[&<>"']/g, (char) => {
           return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char];
@@ -282,6 +332,63 @@
           updateLog(logItem, dataText, mockSubtitle(responseMockStatus(response)));
         } catch (error) {
           updateLog(logItem, error.message, "Request failed");
+        }
+      });
+
+      document.querySelector("#downloadBlob").addEventListener("click", async () => {
+        const logItem = createLog("Fetch JS-generated Blob");
+        const blobUrl = URL.createObjectURL(
+          new Blob([JSON.stringify({ source: "MockTools", generated: true }, null, 2)], {
+            type: "application/json"
+          })
+        );
+
+        try {
+          const response = await fetch(blobUrl);
+          const blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = "mocktools-generated.json";
+          link.click();
+          URL.revokeObjectURL(downloadUrl);
+          updateLog(logItem, await blob.text(), "Blob download started");
+        } catch (error) {
+          updateLog(logItem, error.message, "Blob download failed");
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      });
+
+      document.querySelector("#downloadZipBlob").addEventListener("click", async () => {
+        const logItem = createLog("Fetch JS-generated ZIP Blob");
+        const zipBlobUrl = URL.createObjectURL(
+          createZipBlob(
+            "mocktools-generated.json",
+            JSON.stringify({ source: "MockTools", archive: true, generated: true }, null, 2)
+          )
+        );
+
+        try {
+          const response = await fetch(zipBlobUrl);
+          const blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = "mocktools-generated.zip";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+          updateLog(
+            logItem,
+            JSON.stringify({ filename: link.download, type: blob.type, size: blob.size }, null, 2),
+            "ZIP Blob download started"
+          );
+        } catch (error) {
+          updateLog(logItem, error.message, "ZIP Blob download failed");
+        } finally {
+          URL.revokeObjectURL(zipBlobUrl);
         }
       });
 
