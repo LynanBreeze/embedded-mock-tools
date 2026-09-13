@@ -1989,11 +1989,27 @@
         }
       });
     });
+    root.querySelectorAll("[data-copy-mock-group]").forEach((item) => {
+      item.addEventListener("click", () => {
+        const groupKey = item.getAttribute("data-copy-mock-group");
+        const group = getMockGroups().find((entry) => entry.key === groupKey);
+        if (!group) return;
+
+        copyMockRuleToClipboard(group).catch((error) => {
+          console.error("Failed to copy mock rule: ", error);
+        });
+        state.contextMenu = null;
+        notify();
+      });
+    });
     root.querySelectorAll("[data-save-mock]").forEach((button) => {
       button.addEventListener("click", () => {
         const id = button.getAttribute("data-save-mock");
         saveMockFromForm(root, id);
       });
+    });
+    root.querySelector("[data-paste-mock-rule]")?.addEventListener("click", () => {
+      pasteMockRuleIntoForm(root, root.querySelector("[data-paste-mock-rule]"));
     });
     root.querySelectorAll("[data-format-group-field]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -2236,6 +2252,22 @@
         if (state.jsonTreeSections.has(title)) state.jsonTreeSections.delete(title);
         else state.jsonTreeSections.add(title);
         notify();
+      });
+    });
+    root.querySelectorAll("[data-toggle-json-tree-all]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const tree = button.parentElement?.querySelector(".json-tree");
+        const nodes = tree ? [...tree.querySelectorAll("details")] : [];
+        if (!nodes.length) return;
+
+        const shouldExpand = nodes.some((node) => !node.open);
+        nodes.forEach((node) => {
+          node.open = shouldExpand;
+        });
+        const nextAction = shouldExpand ? "Collapse all" : "Expand all";
+        button.setAttribute("data-tooltip", nextAction);
+        button.setAttribute("title", nextAction);
       });
     });
     const searchInput = root.querySelector("[data-search-input]");
@@ -2913,6 +2945,108 @@
     openConfirmDialog("mock-groups", Array.from(selectedKeys), `Delete ${selectedKeys.size} selected mock rule${selectedKeys.size === 1 ? "" : "s"}?`);
   }
 
+  async function copyMockRuleToClipboard(group) {
+    const clipboard = navigator.clipboard;
+    if (!clipboard || typeof clipboard.writeText !== "function") {
+      throw new Error("Clipboard API is unavailable in this context.");
+    }
+
+    const activeMock = group.activeMock || group.mocks[0];
+    const toClipboardConfig = (mock) => ({
+      name: mock.name || "",
+      enabled: Boolean(mock.enabled),
+      requestBody: mock.requestBody || "",
+      status: normalizeResponseStatus(mock.status),
+      delay: Number(mock.delay || 0),
+      headers: cloneHeaders(mock.headers),
+      body: mock.body || ""
+    });
+    const payload = {
+      version: 1,
+      type: "mock-rule",
+      rule: {
+        method: group.method,
+        pattern: group.pattern,
+        requestBody: group.requestBody || "",
+        group: group.group || "",
+        aliasName: group.aliasName || "",
+        config: activeMock ? toClipboardConfig(activeMock) : null,
+        configs: group.mocks.map(toClipboardConfig)
+      }
+    };
+
+    await clipboard.writeText(JSON.stringify(payload, null, 2));
+  }
+
+  async function pasteMockRuleIntoForm(root, button) {
+    const clipboard = navigator.clipboard;
+    if (!clipboard || typeof clipboard.readText !== "function") {
+      window.alert("Clipboard read is unavailable in this context.");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(await clipboard.readText());
+      const rule = parsed?.type === "mock-rule" ? parsed.rule : parsed?.rule || parsed;
+      const configs = Array.isArray(rule?.configs) ? rule.configs : [];
+      const config = rule?.config || configs.find((item) => item?.enabled) || configs[0];
+      const id = button?.getAttribute("data-paste-mock-rule");
+      const currentMock = state.mocks.find((mock) => mock.id === id);
+      const card = id ? root.querySelector(`[data-mock-card="${cssEscape(id)}"]`) : null;
+      if (!rule || typeof rule !== "object" || !config || !card || !currentMock) {
+        throw new Error("Invalid mock rule configuration");
+      }
+
+      const setGroupField = (field, value) => {
+        const input = root.querySelector(`[data-group-field="${field}"][data-group-editor-id="${cssEscape(id)}"]`);
+        if (input) input.value = value;
+      };
+      const setMockField = (field, value) => {
+        const input = card.querySelector(`[data-mock-field="${field}"]`);
+        if (!input) return;
+        if (input.type === "checkbox") input.checked = Boolean(value);
+        else input.value = value;
+      };
+
+      const method = String(rule.method || config.method || "GET").toUpperCase();
+      const pattern = String(rule.pattern ?? config.pattern ?? "");
+      const requestBodyValue = rule.requestBody ?? config.requestBody ?? "";
+      const requestBody = typeof requestBodyValue === "string"
+        ? requestBodyValue
+        : JSON.stringify(requestBodyValue, null, 2);
+      const groupName = String(rule.group || "");
+      const aliasName = String(rule.aliasName || "");
+      setGroupField("method", method);
+      setGroupField("pattern", pattern);
+      setGroupField("requestBody", requestBody);
+      setGroupField("group", groupName);
+      setGroupField("aliasName", aliasName);
+      setMockField("name", String(config.name || ""));
+      setMockField("enabled", config.enabled !== false);
+      setMockField("status", String(normalizeResponseStatus(config.status)));
+      setMockField("delay", String(Number(config.delay || 0)));
+      setMockField("headers", JSON.stringify(config.headers || {}, null, 2));
+      setMockField("body", typeof config.body === "string" ? config.body : JSON.stringify(config.body || {}, null, 2));
+
+      const currentGroupKey = mockActivationKey(currentMock);
+      const groupIds = new Set(getMocksForGroupKey(currentGroupKey).map((mock) => mock.id));
+      state.mocks = state.mocks.map((mock) => groupIds.has(mock.id)
+        ? { ...mock, method, pattern, requestBody, group: groupName, aliasName }
+        : mock
+      );
+      saveMocks(state.mocks, { silent: true });
+
+      button.textContent = "Pasted";
+      button.disabled = true;
+      window.setTimeout(() => {
+        button.textContent = "Paste Rule";
+        button.disabled = false;
+      }, 1000);
+    } catch (error) {
+      window.alert(`Paste failed: ${error.message || "invalid mock rule configuration"}`);
+    }
+  }
+
   function exportSelectedMockGroups() {
     const selectedKeys = new Set(state.selectedMockGroupKeys);
     if (!selectedKeys.size) return;
@@ -3371,7 +3505,10 @@
         <div class="modal-overlay inline-style-19113f9d" data-close-details-modal>
           <div class="modal-card inline-style-d7a3860a" onclick="event.stopPropagation();">
             <div class="modal-header inline-style-801856b0">
-              <h3 class="inline-style-a57ba1a3">${state.pendingMockId === state.editingMockId ? (state.pendingMockIsAdditional ? "Edit Mock Rule (Add New Config)" : "Add Mock Rule") : "Edit Mock Rule"}</h3>
+              <div class="mock-rule-modal-title">
+                <h3 class="inline-style-a57ba1a3">${state.pendingMockId === state.editingMockId ? (state.pendingMockIsAdditional ? "Edit Mock Rule (Add New Config)" : "Add Mock Rule") : "Edit Mock Rule"}</h3>
+                <button type="button" class="secondary-btn paste-mock-rule-btn" data-paste-mock-rule="${escapeAttr(state.editingMockId)}" title="Paste mock rule configuration">Paste Rule</button>
+              </div>
               <button type="button" class="close-btn inline-style-df603a6e" data-close-details-modal>&times;</button>
             </div>
             <div class="modal-body inline-style-e191b109">
@@ -3943,7 +4080,7 @@
 
   function contextMenuTemplate(menu) {
     const menuWidth = 216;
-    const menuHeight = menu.type === "mock-group" ? 80 : menu.type === "snapshot-item" ? 110 : 150;
+    const menuHeight = menu.type === "mock-group" ? 120 : menu.type === "snapshot-item" ? 110 : 150;
     const boundsWidth = menu.width || window.innerWidth;
     const boundsHeight = menu.height || window.innerHeight;
 
@@ -3983,11 +4120,20 @@
         <div class="context-menu" style="left: ${left}px; top: ${top}px;" role="menu">
           <button
             type="button"
+            data-copy-mock-group="${escapeAttr(menu.groupKey)}"
+            ${group ? "" : "disabled"}
+            role="menuitem"
+          >
+            <span class="menu-title">Copy mock rule</span>
+            <span class="menu-subtitle">Copy rule configuration to clipboard</span>
+          </button>
+          <button
+            type="button"
             data-delete-mock-group="${escapeAttr(menu.groupKey)}"
             role="menuitem"
           >
             <span class="menu-title inline-style-65e00a19">Delete mock rule</span>
-            <span class="menu-subtitle">${group ? escapeHtml(`${group.method} ${group.pattern}`) : "Endpoint unavailable"}</span>
+            <span class="menu-subtitle">Delete this rule and all configs</span>
           </button>
         </div>
       `;
@@ -4274,9 +4420,10 @@
           </svg>
           <span>${title}</span>
         </h3>
-        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ts" data-copy-ts="${escapeAttr(title)}" data-copy-ts-json="${escapeAttr(JSON.stringify(parsedJson))}" title="Copy TypeScript interface"><span class="ts-label">TS</span><span class="ts-check" aria-hidden="true">✓</span></button>` : ""}
-        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? "{}" : "⌘"}</button>` : ""}
-        <button type="button" class="copy-btn" data-copy-btn title="Copy to clipboard">
+        ${state.jsonTreeSections.has(title) && parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn tree-all" data-toggle-json-tree-all="${escapeAttr(title)}" data-tooltip="Collapse all" title="Collapse all"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 9 12 5 16 9"></polyline><polyline points="8 15 12 19 16 15"></polyline></svg></button>` : ""}
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ts" data-copy-ts="${escapeAttr(title)}" data-copy-ts-json="${escapeAttr(JSON.stringify(parsedJson))}" data-tooltip="Copy TypeScript interface" title="Copy TypeScript interface"><span class="ts-label">TS</span><span class="ts-check" aria-hidden="true">✓</span></button>` : ""}
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" data-tooltip="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? "{}" : "⌘"}</button>` : ""}
+        <button type="button" class="copy-btn" data-copy-btn data-tooltip="Copy to clipboard" title="Copy to clipboard">
           <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-copy">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -4883,6 +5030,24 @@
         flex-shrink: 1;
         overflow: auto;
       }
+      .detail > [data-section-title="Request headers"] > .view-mode-btn,
+      .detail > [data-section-title="Response headers"] > .view-mode-btn,
+      .detail > [data-section-title="Response body"] > .view-mode-btn {
+        background: rgba(30, 58, 95, .92);
+        border: 1px solid rgba(122, 167, 247, .62);
+        border-radius: 4px;
+        color: #dbeafe;
+        top: 36px;
+        right: 12px;
+        z-index: 1;
+      }
+      .detail > [data-section-title="Request headers"] > .view-mode-btn:hover:not(.copied),
+      .detail > [data-section-title="Response headers"] > .view-mode-btn:hover:not(.copied),
+      .detail > [data-section-title="Response body"] > .view-mode-btn:hover:not(.copied) {
+        background: #2563eb;
+        border-color: rgba(191, 219, 254, .78);
+        color: #fff;
+      }
       .detail-title {
         align-items: center;
         display: flex;
@@ -4968,24 +5133,61 @@
         background: transparent;
         color: #64748b;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         font-family: monospace;
         width: 20px;
         height: 20px;
         padding: 0;
-        line-height: 20px;
+        line-height: 1;
         text-align: center;
         font-size: 12px;
       }
       .code-section .view-mode-btn.code { font-size: 13px; }
       .code-section .view-mode-btn.tree { font-size: 17px; }
-      .code-section .view-mode-btn.ts { right: 48px; font-size: 11px; font-weight: 700; }
+      .code-section .view-mode-btn.tree-all { right: 68px; font-size: 16px; }
+      .code-section .view-mode-btn.tree-all svg { height: 14px; width: 14px; }
+      .code-section .view-mode-btn.ts { right: 40px; font-size: 11px; font-weight: 700; }
       .code-section .view-mode-btn.copied { background: transparent; color: #16a34a; }
       .code-section .view-mode-btn.ts .ts-check { display: none; font-size: 16px; font-weight: 800; line-height: 1; }
       .code-section .view-mode-btn.ts.copied .ts-label { display: none; }
       .code-section .view-mode-btn.ts.copied .ts-check { display: inline; }
+      .code-section [data-tooltip]::after {
+        background: #172033;
+        border: 1px solid #536887;
+        border-radius: 6px;
+        bottom: auto;
+        color: #f8fafc;
+        content: attr(data-tooltip);
+        font-size: 11px;
+        font-weight: 700;
+        left: auto;
+        line-height: 1.3;
+        max-width: 220px;
+        opacity: 0;
+        padding: 7px 10px;
+        pointer-events: none;
+        position: absolute;
+        right: 0;
+        text-align: center;
+        top: calc(100% + 8px);
+        transform: translateY(-4px);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+        visibility: hidden;
+        white-space: nowrap;
+        width: max-content;
+        z-index: 20;
+      }
+      .code-section [data-tooltip]:hover::after,
+      .code-section [data-tooltip]:focus-visible::after {
+        opacity: 1;
+        transform: translateY(0);
+        visibility: visible;
+      }
       .json-tree { background: #111827; color: #dce7f7; border-radius: 9px; padding: 12px; overflow: auto; max-height: inherit; font: 14px/1.7 monospace; }
-      .json-tree-children { margin-left: 36px; }
-      .json-tree-leaf { padding: 1px 0 1px 20px; white-space: nowrap; }
+      .json-tree-children { margin-left: 2ch; }
+      .json-tree-leaf { padding: 1px 0 1px 1.1em; white-space: nowrap; }
       .json-tree summary { align-items: center; cursor: pointer; display: flex; list-style: none; padding: 1px 0; white-space: nowrap; }
       .json-tree summary::-webkit-details-marker { display: none; }
       .json-tree summary::marker { display: none; }
@@ -5836,6 +6038,16 @@
         margin: 0;
         font-size: 14px;
         color: #1e293b;
+      }
+      .mock-rule-modal-title {
+        align-items: center;
+        display: flex;
+        gap: 8px;
+        min-width: 0;
+      }
+      .paste-mock-rule-btn {
+        font-size: 10px;
+        padding: 4px 8px;
       }
       .modal-header .close-btn {
         background: transparent;
