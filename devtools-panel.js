@@ -2199,6 +2199,36 @@
         }
       });
     });
+    root.querySelectorAll("[data-copy-ts]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const json = button.getAttribute("data-copy-ts-json");
+        if (!json) return;
+
+        let parsed;
+        try {
+          parsed = JSON.parse(json);
+        } catch (_e) {
+          return;
+        }
+
+        const clipboard = navigator.clipboard;
+        if (!clipboard || typeof clipboard.writeText !== "function") {
+          console.warn("Clipboard API is unavailable in this context.");
+          return;
+        }
+
+        const title = button.getAttribute("data-copy-ts") || "Root";
+        Promise.resolve()
+          .then(() => clipboard.writeText(generateTypeScript(parsed, title)))
+          .then(() => {
+            button.classList.add("copied");
+            setTimeout(() => button.classList.remove("copied"), 500);
+          })
+          .catch((err) => {
+            console.error("Failed to copy TypeScript: ", err);
+          });
+      });
+    });
     root.querySelectorAll("[data-toggle-json-tree]").forEach((button) => {
       button.addEventListener("click", () => {
         const title = button.getAttribute("data-toggle-json-tree");
@@ -3613,7 +3643,7 @@
         <span class="rule-dot" aria-hidden="true"></span>
         <span class="rule-main">
           <strong>${escapeHtml(group.aliasName || endpointLabel)}</strong>
-          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${hasPayloadMatch ? `, <span class="payload-match-badge">PAYLOAD</span>` : ""}</em>
+          <em>${group.mocks.length} config${group.mocks.length === 1 ? "" : "s"}, active: ${escapeHtml(group.activeMock?.name || group.activeMock?.status || "none")}${hasPayloadMatch ? ` <span class="payload-match-badge">PAYLOAD</span>` : ""}</em>
         </span>
         <span class="rule-status ${statusClass(group.activeMock?.status)}">${escapeHtml(String(group.activeMock?.status || "-"))}</span>
         <label class="toggle rule-toggle row-toggle-zone" title="${group.activeMock ? "Disable all configs" : "Enable first config"}">
@@ -4213,6 +4243,7 @@
           </svg>
           <span>${title}</span>
         </h3>
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ts" data-copy-ts="${escapeAttr(title)}" data-copy-ts-json="${escapeAttr(JSON.stringify(parsedJson))}" title="Copy TypeScript interface"><span class="ts-label">TS</span><span class="ts-check" aria-hidden="true">✓</span></button>` : ""}
         ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? "{}" : "⌘"}</button>` : ""}
         <button type="button" class="copy-btn" data-copy-btn title="Copy to clipboard">
           <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-copy">
@@ -4223,9 +4254,88 @@
             <polyline points="20 6 9 17 4 12"></polyline>
           </svg>
         </button>
-        ${state.jsonTreeSections.has(title) && parsedJson !== null ? `<div class="json-tree">${renderJsonTree(parsedJson)}</div>` : `<pre>${contentHtml}</pre>`}
+        ${isCollapsed ? "" : state.jsonTreeSections.has(title) && parsedJson !== null ? `<div class="json-tree">${renderJsonTree(parsedJson)}</div>` : `<pre>${contentHtml}</pre>`}
       </div>
     `;
+  }
+
+  function generateTypeScript(value, rootName = "Root") {
+    const interfaces = [];
+    const usedNames = new Set();
+    const safeRootName = toTypeScriptName(rootName, "Root");
+
+    function reserveInterfaceName(preferredName) {
+      const baseName = toTypeScriptName(preferredName, "Value");
+      let name = baseName;
+      let suffix = 2;
+      while (usedNames.has(name)) name = `${baseName}${suffix++}`;
+      usedNames.add(name);
+      return name;
+    }
+
+    function typeFor(item, preferredName) {
+      if (item === null) return "unknown";
+      if (Array.isArray(item)) {
+        if (item.length === 0) return "unknown[]";
+        const itemName = singularizeTypeName(preferredName);
+        if (item.every((entry) => entry !== null && typeof entry === "object" && !Array.isArray(entry))) {
+          return `${typeFor(item[0], itemName)}[]`;
+        }
+        const itemTypes = [...new Set(item.map((entry) => typeFor(entry, itemName)))];
+        const union = itemTypes.length === 1 ? itemTypes[0] : `(${itemTypes.join(" | ")})`;
+        return `${union}[]`;
+      }
+      if (typeof item === "object") {
+        const interfaceName = reserveInterfaceName(preferredName);
+        const declaration = { name: interfaceName, fields: [] };
+        interfaces.push(declaration);
+        Object.entries(item).forEach(([key, child]) => {
+          declaration.fields.push({
+            key: isTypeScriptIdentifier(key) ? key : JSON.stringify(key),
+            type: typeFor(child, key)
+          });
+        });
+        return interfaceName;
+      }
+      if (typeof item === "string") return "string";
+      if (typeof item === "number") return "number";
+      if (typeof item === "boolean") return "boolean";
+      return "unknown";
+    }
+
+    const rootType = typeFor(value, safeRootName);
+    const declarations = interfaces.map(({ name, fields }) => {
+      const body = fields.length
+        ? fields.map(({ key, type }) => `  ${key}: ${type};`).join("\n")
+        : "  // No properties";
+      return `interface ${name} {\n${body}\n}`;
+    });
+
+    if (interfaces.length === 0 || interfaces[0].name !== rootType) {
+      declarations.unshift(`type ${safeRootName} = ${rootType};`);
+    }
+    return declarations.join("\n\n");
+  }
+
+  function toTypeScriptName(value, fallback) {
+    const words = String(value ?? "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .split(/[^a-zA-Z0-9_$]+/)
+      .filter(Boolean);
+    const name = words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("");
+    return /^[A-Za-z_$]/.test(name) ? name : fallback;
+  }
+
+  function singularizeTypeName(value) {
+    const name = toTypeScriptName(value, "Item");
+    if (name.endsWith("ies")) return `${name.slice(0, -3)}y`;
+    if (name.endsWith("ss")) return name;
+    if (name.endsWith("s")) return name.slice(0, -1);
+    return `${name}Item`;
+  }
+
+  function isTypeScriptIdentifier(value) {
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(value);
   }
 
   function renderJsonTree(value, key = "root", isArrayEntry = false) {
@@ -4837,17 +4947,22 @@
       }
       .code-section .view-mode-btn.code { font-size: 13px; }
       .code-section .view-mode-btn.tree { font-size: 17px; }
+      .code-section .view-mode-btn.ts { right: 48px; font-size: 11px; font-weight: 700; }
+      .code-section .view-mode-btn.copied { background: transparent; color: #16a34a; }
+      .code-section .view-mode-btn.ts .ts-check { display: none; font-size: 16px; font-weight: 800; line-height: 1; }
+      .code-section .view-mode-btn.ts.copied .ts-label { display: none; }
+      .code-section .view-mode-btn.ts.copied .ts-check { display: inline; }
       .json-tree { background: #111827; color: #dce7f7; border-radius: 9px; padding: 12px; overflow: auto; max-height: inherit; font: 14px/1.7 monospace; }
       .json-tree-children { margin-left: 36px; }
       .json-tree-leaf { padding: 1px 0 1px 20px; white-space: nowrap; }
       .json-tree summary { align-items: center; cursor: pointer; display: flex; list-style: none; padding: 1px 0; white-space: nowrap; }
       .json-tree summary::-webkit-details-marker { display: none; }
       .json-tree summary::marker { display: none; }
-      .json-tree-toggle { border-bottom: 1.5px solid #9fb3d1; border-right: 1.5px solid #9fb3d1; display: inline-block; flex: 0 0 9px; height: 9px; margin: -4px 11px 0 2px; transform: rotate(45deg); transition: transform 0.12s ease; width: 9px; }
+      .json-tree-toggle { border-bottom: 1.5px solid #9fb3d1; border-right: 1.5px solid #9fb3d1; display: inline-block; flex: 0 0 7px; height: 7px; margin: -4px 6px 0 2px; transform: rotate(45deg); transition: transform 0.12s ease; width: 7px; }
       .json-tree details:not([open]) > summary .json-tree-toggle { margin-top: 0; transform: rotate(-45deg); }
       .json-tree details:not([open]) > summary { color: #9fb3d1; }
       .json-tree-key { color: #f7c76b; }
-      .json-tree-colon { color: #9aa7bd; padding: 0 9px; }
+      .json-tree-colon { color: #9aa7bd; padding: 0 5px 0 0; }
       .json-tree-type { color: #82aaff; }
       .json-tree-value.string { color: #b8e986; }
       .json-tree-value.number { color: #ff896b; }
@@ -4896,6 +5011,9 @@
         transform: rotate(0deg);
       }
       .code-section.is-collapsed pre {
+        display: none;
+      }
+      .code-section.is-collapsed .json-tree {
         display: none;
       }
       .code-section.is-collapsed textarea, .code-section.is-collapsed .format-btn {
