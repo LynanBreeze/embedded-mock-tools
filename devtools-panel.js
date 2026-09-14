@@ -3413,7 +3413,7 @@
 
             <div class="settings-group inline-style-5f6b5dd6">
               <label class="inline-style-3af47968">Version</label>
-              <div class="inline-style-ee32b08f">1.0.35</div>
+              <div class="inline-style-ee32b08f">1.0.36</div>
             </div>
           </div>
           <div class="modal-footer inline-style-4de12c33">
