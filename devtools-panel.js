@@ -4423,8 +4423,8 @@
           <span>${title}</span>
         </h3>
         ${state.jsonTreeSections.has(title) && parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn tree-all" data-toggle-json-tree-all="${escapeAttr(title)}" data-tooltip="Collapse all" title="Collapse all"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 9 12 5 16 9"></polyline><polyline points="8 15 12 19 16 15"></polyline></svg></button>` : ""}
-        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ts" data-copy-ts="${escapeAttr(title)}" data-copy-ts-json="${escapeAttr(JSON.stringify(parsedJson))}" data-tooltip="Copy TypeScript interface" title="Copy TypeScript interface"><span class="ts-label">TS</span><span class="ts-check" aria-hidden="true">✓</span></button>` : ""}
-        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" data-tooltip="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? "{}" : "⌘"}</button>` : ""}
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ts" data-copy-ts="${escapeAttr(title)}" data-copy-ts-json="${escapeAttr(JSON.stringify(parsedJson))}" data-tooltip="Copy TypeScript interface" title="Copy TypeScript interface"><svg class="ts-label" viewBox="0 0 24 18" aria-hidden="true"><text x="12" y="14" text-anchor="middle">TS</text></svg><svg class="ts-check" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg></button>` : ""}
+        ${parsedJson !== null && !isCollapsed ? `<button type="button" class="view-mode-btn ${state.jsonTreeSections.has(title) ? "code" : "tree"}" data-toggle-json-tree="${escapeAttr(title)}" data-tooltip="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}" title="${state.jsonTreeSections.has(title) ? "View JSON text" : "View JSON tree"}">${state.jsonTreeSections.has(title) ? `<svg class="json-mode-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H8a2 2 0 0 0-2 2v3a2 2 0 0 1-2 2 2 2 0 0 1 2 2v3a2 2 0 0 0 2 2h1"></path><path d="M15 4h1a2 2 0 0 1 2 2v3a2 2 0 0 0 2 2 2 2 0 0 0-2 2v3a2 2 0 0 1-2 2h-1"></path></svg>` : `<svg class="json-mode-icon" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4M12 12H7v4M12 12h5v4"></path><circle cx="12" cy="6" r="2"></circle><circle cx="7" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>`}</button>` : ""}
         <button type="button" class="copy-btn" data-copy-btn data-tooltip="Copy to clipboard" title="Copy to clipboard">
           <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" class="icon-copy">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -5033,6 +5033,7 @@
         overflow: auto;
       }
       .detail > [data-section-title="Request headers"] > .view-mode-btn,
+      .detail > [data-section-title="Request body"] > .view-mode-btn,
       .detail > [data-section-title="Response headers"] > .view-mode-btn,
       .detail > [data-section-title="Response body"] > .view-mode-btn {
         background: rgba(30, 58, 95, .92);
@@ -5044,6 +5045,7 @@
         z-index: 1;
       }
       .detail > [data-section-title="Request headers"] > .view-mode-btn:hover:not(.copied),
+      .detail > [data-section-title="Request body"] > .view-mode-btn:hover:not(.copied),
       .detail > [data-section-title="Response headers"] > .view-mode-btn:hover:not(.copied),
       .detail > [data-section-title="Response body"] > .view-mode-btn:hover:not(.copied) {
         background: #2563eb;
@@ -5135,7 +5137,7 @@
         background: transparent;
         color: #64748b;
         cursor: pointer;
-        display: inline-flex;
+        display: flex;
         align-items: center;
         justify-content: center;
         font-family: monospace;
@@ -5146,15 +5148,23 @@
         text-align: center;
         font-size: 12px;
       }
+      .code-section .view-mode-btn > svg {
+        display: block;
+        flex: 0 0 auto;
+      }
       .code-section .view-mode-btn.code { font-size: 13px; }
       .code-section .view-mode-btn.tree { font-size: 17px; }
       .code-section .view-mode-btn.tree-all { right: 68px; font-size: 16px; }
       .code-section .view-mode-btn.tree-all svg { height: 14px; width: 14px; }
+      .code-section .view-mode-btn.code > svg,
+      .code-section .view-mode-btn.tree > svg { height: 16px; width: 16px; }
       .code-section .view-mode-btn.ts { right: 40px; font-size: 11px; font-weight: 700; }
+      .code-section .view-mode-btn.ts .ts-label { height: 18px; width: 24px; }
       .code-section .view-mode-btn.copied { background: transparent; color: #16a34a; }
-      .code-section .view-mode-btn.ts .ts-check { display: none; font-size: 16px; font-weight: 800; line-height: 1; }
+      .code-section .view-mode-btn.ts .ts-label text { fill: currentColor; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 700; }
+      .code-section .view-mode-btn.ts .ts-check { display: none; height: 16px; width: 16px; }
       .code-section .view-mode-btn.ts.copied .ts-label { display: none; }
-      .code-section .view-mode-btn.ts.copied .ts-check { display: inline; }
+      .code-section .view-mode-btn.ts.copied .ts-check { display: block; }
       .code-section [data-tooltip]::after {
         background: #172033;
         border: 1px solid #536887;
@@ -5196,13 +5206,13 @@
       .json-tree-toggle { border-bottom: 1.5px solid #9fb3d1; border-right: 1.5px solid #9fb3d1; display: inline-block; flex: 0 0 7px; height: 7px; margin: -4px 6px 0 2px; transform: rotate(45deg); transition: transform 0.12s ease; width: 7px; }
       .json-tree details:not([open]) > summary .json-tree-toggle { margin-top: 0; transform: rotate(-45deg); }
       .json-tree details:not([open]) > summary { color: #9fb3d1; }
-      .json-tree-key { color: #f7c76b; }
+      .json-tree-key { color: #38bdf8; font-weight: 600; }
       .json-tree-colon { color: #9aa7bd; padding: 0 5px 0 0; }
       .json-tree-type { color: #82aaff; }
-      .json-tree-value.string { color: #b8e986; }
-      .json-tree-value.number { color: #ff896b; }
+      .json-tree-value.string { color: #34d399; }
+      .json-tree-value.number { color: #fbbf24; }
       .json-tree-value.boolean { color: #c084fc; }
-      .json-tree-value.null { color: #c084fc; }
+      .json-tree-value.null { color: #94a3b8; font-style: italic; }
       .code-section .copy-btn svg {
         width: 12px;
         height: 12px;
