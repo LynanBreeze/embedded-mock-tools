@@ -945,7 +945,9 @@
   function addRequest(request) {
     state.requests.unshift(request);
     state.requests = state.requests.slice(0, MAX_REQUESTS);
-    state.selectedId = request.id;
+    if (state.selectedId && !state.requests.some((item) => item.id === state.selectedId)) {
+      state.selectedId = null;
+    }
     notify();
   }
 
@@ -6591,7 +6593,7 @@
       .config-top-row .template-tab { padding: 4px 7px; font-size: 10px; }
       .mock-card textarea[data-mock-field="body"],
       textarea[data-snapshot-field="body"] {
-        min-height: 280px;
+        min-height: 300px;
       }
       input, select, textarea { border-color: #d5deeb; border-radius: 5px; }
       input:focus, select:focus, textarea:focus { border-color: #7aa7f7; box-shadow: none !important; }

@@ -356,6 +356,13 @@ Feature: Complete Embedded MockTools Panel behavior
     Then the newest request should be first
     And the oldest request should be removed
 
+  @history
+  Scenario: Preserve the current request selection when new records arrive
+    Given a request is selected
+    When a new request is added
+    Then the selected request should remain selected
+    And the new request should not be selected automatically
+
   @history @PANEL-044
   Scenario: Combine URL, status, and sort filters
     Given the list contains records with different URLs, statuses, and times
