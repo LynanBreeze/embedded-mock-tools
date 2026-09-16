@@ -153,6 +153,76 @@ The Service Worker is enabled only on `http://` or `https://` pages where the br
 
 In `file://` environments or when the Service Worker is unavailable, the tool still intercepts and records requests in the current page, but mocked requests do not enter the browser's native network stack. Cross-origin requests, CSP, browser extension policies, and another Service Worker owned by the site may also affect interception.
 
+### Disable MockTools Without Reloading
+
+If the application conditionally calls `MockTools.init()` based on a query parameter, removing that parameter does not stop a previously registered MockTools Service Worker. When initialization is skipped, explicitly clear the Service Worker's in-memory and persisted rules:
+
+```js
+async function disableMockToolsWithoutReload() {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+
+  const workers = [
+    navigator.serviceWorker.controller,
+    ...registrations
+      .filter((registration) =>
+        [registration.active, registration.waiting, registration.installing]
+          .some((worker) => worker?.scriptURL.includes("mocktools-sw.js"))
+      )
+      .flatMap((registration) => [
+        registration.active,
+        registration.waiting,
+        registration.installing
+      ])
+  ].filter(Boolean);
+
+  [...new Set(workers)].forEach((worker) => {
+    worker.postMessage({
+      type: "MOCKTOOLS_UPDATE_MOCKS",
+      version: Date.now(),
+      mocks: []
+    });
+    worker.postMessage({
+      type: "MOCKTOOLS_UPDATE_SNAPSHOT",
+      activeSnapshotRules: null
+    });
+  });
+
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open("embedded-devtools", 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains("settings")) {
+        request.result.createObjectStore("settings");
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction("settings", "readwrite");
+    const store = transaction.objectStore("settings");
+    const updatedAt = new Date().toISOString();
+    store.put({ value: false, updatedAt }, "mock_enabled");
+    store.put({ value: null, updatedAt }, "active_snapshot_id");
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+  });
+
+  db.close();
+}
+
+(async () => {
+  const mockEnabled = new URLSearchParams(location.search).get("mock") === "true";
+  if (mockEnabled) {
+    MockTools.init();
+  } else {
+    await disableMockToolsWithoutReload();
+  }
+})();
+```
+
+This leaves the Service Worker registered, but with no Mock or Snapshot rules, so subsequent requests pass through to the network. The helper is application-side code; it is not part of the `MockTools` public API.
+
 ## Project Files
 
 - `devtools-panel.js`: Panel UI, request interception, Mock/Snapshot management, and public API.
