@@ -659,3 +659,30 @@
     那么应返回新数组并保留记录顺序
     当调用 clearRequests
     那么记录和选择都应清空并触发渲染
+
+  @settings @PANEL-081
+  场景: 设置中保存 Snapshot URL 移除规则
+    当添加 String 与 Regex 两种规则并重新打开设置
+    那么两种规则的类型和表达式都应保持
+    并且删除规则后该变化应持久化
+
+  @snapshot @PANEL-082
+  场景: 保存 Snapshot 前移除 URL 匹配片段
+    假如设置了 String "/test/a/b" 和 Regex "/v\d+"
+    并且请求 URL 为 "https://example.test/test/a/b/v2/users"
+    当保存包含该请求的 Snapshot
+    那么 Snapshot 规则 URL 应为 "/users"
+    并且请求历史中的原始 URL 应保持不变
+
+  @mock @PANEL-083
+  场景: 从 Mock Rule 编辑器调整规则顺序
+    假如当前规则不是 Mock Rules 列表中的首条或末条
+    当点击 URL 输入框右侧的上移或下移按钮
+    那么整条规则及其 Config 应在列表中移动一位
+    并且新顺序应持久化且影响同优先级 Mock 的匹配顺序
+
+  @mock @PANEL-084
+  场景: Request Body Match Key 中 Tab 输入两个空格
+    当在 Request Body Match Key 文本框按下 Tab
+    那么光标处应插入两个空格而不是切换焦点
+    并且插入后的值应保存到对应规则

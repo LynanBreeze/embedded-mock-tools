@@ -9,6 +9,7 @@
   const SNAPSHOTS_RECORD_KEY = "snapshots";
   const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
   const MOCK_ENABLED_KEY = "mock_enabled";
+  const SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY = "embedded-devtools-snapshot-url-strip-rules";
   const MAX_REQUESTS = 200;
   const MAX_RESPONSE_BODY_BYTES = 256 * 1024;
   const SERVICE_WORKER_SCRIPT_NAME = "mocktools-sw.js";
@@ -27,6 +28,7 @@
     serviceWorkerRegistration: null,
     useServiceWorker: false,
     requests: [],
+    snapshotUrlStripRules: [],
     mocks: [],
     requestSort: "newest",
     requestSearch: "",
@@ -84,6 +86,7 @@
       state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(initOptions.seedMocks || []));
       state.selectedMockId = null;
       state.buttonPosition = initOptions.buttonPosition || initOptions.floatButtonPosition || null;
+      state.snapshotUrlStripRules = readSnapshotUrlStripRules();
       mountPanel();
       installFetchInterceptor();
       installXhrInterceptor();
@@ -489,6 +492,33 @@
     try {
       window.localStorage.removeItem(key);
     } catch (_error) {}
+  }
+
+  function readSnapshotUrlStripRules() {
+    try {
+      return normalizeSnapshotUrlStripRules(
+        safeJsonParse(safeLocalStorageGet(SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY), [])
+      );
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function persistSnapshotUrlStripRules() {
+    safeLocalStorageSet(
+      SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY,
+      JSON.stringify(normalizeSnapshotUrlStripRules(state.snapshotUrlStripRules))
+    );
+  }
+
+  function normalizeSnapshotUrlStripRules(rules) {
+    if (!Array.isArray(rules)) return [];
+    return rules
+      .filter((rule) => rule && typeof rule === "object")
+      .map((rule) => ({
+        type: rule.type === "regex" ? "regex" : "string",
+        value: typeof rule.value === "string" ? rule.value : ""
+      }));
   }
 
   function readLegacyLocalStorageMocks() {
@@ -1295,6 +1325,8 @@
       const focusedSelector = activeElement && (
         activeElement.hasAttribute("data-search-input") ? "[data-search-input]" :
         activeElement.hasAttribute("data-status-filter") ? "[data-status-filter]" :
+        activeElement.hasAttribute("data-snapshot-url-strip-type") ? `[data-snapshot-url-strip-type="${activeElement.getAttribute("data-snapshot-url-strip-type")}"]` :
+        activeElement.hasAttribute("data-snapshot-url-strip-value") ? `[data-snapshot-url-strip-value="${activeElement.getAttribute("data-snapshot-url-strip-value")}"]` :
         activeElement.hasAttribute("data-group-field")
           ? activeElement.hasAttribute("data-group-editor-id")
             ? `[data-group-field="${activeElement.getAttribute("data-group-field")}"][data-group-editor-id="${cssEscape(activeElement.getAttribute("data-group-editor-id"))}"]`
@@ -1713,7 +1745,7 @@
 
       const rulesMap = new Map();
       selectedReqs.forEach((req) => {
-        const pattern = mockPatternFromUrl(req.url);
+        const pattern = snapshotPatternFromUrl(req.url);
         const key = `${req.method}::${pattern}`;
         if (!rulesMap.has(key)) {
           rulesMap.set(key, {
@@ -2353,9 +2385,30 @@
       });
     });
 
-    root.querySelectorAll('[data-group-field="requestBody"]').forEach((input) => {
-      input.addEventListener("change", (e) => {
-        const groupKey = input.getAttribute("data-group-key");
+    root.querySelectorAll("[data-move-mock-group-up]").forEach((button) => {
+      button.addEventListener("click", () => {
+        moveMockGroup(button.getAttribute("data-move-mock-group-up"), -1);
+      });
+    });
+    root.querySelectorAll("[data-move-mock-group-down]").forEach((button) => {
+      button.addEventListener("click", () => {
+        moveMockGroup(button.getAttribute("data-move-mock-group-down"), 1);
+      });
+    });
+
+    root.querySelectorAll('[data-group-field="requestBody"]').forEach((textarea) => {
+      textarea.addEventListener("keydown", (event) => {
+        if (event.key !== "Tab") return;
+        event.preventDefault();
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        textarea.setRangeText("  ", start, end, "end");
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        textarea.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      textarea.addEventListener("change", (e) => {
+        const groupKey = textarea.getAttribute("data-group-key");
         const groupIds = new Set(getMocksForGroupKey(groupKey).map((mock) => mock.id));
         state.mocks = state.mocks.map((mock) => {
           if (groupIds.has(mock.id)) return { ...mock, requestBody: e.target.value };
@@ -2681,13 +2734,13 @@
     root.querySelectorAll("[data-create-snapshot-from-url]").forEach((item) => {
       item.addEventListener("click", () => {
         const targetUrl = item.getAttribute("data-create-snapshot-from-url");
-        const pattern = mockPatternFromUrl(targetUrl);
+        const pattern = snapshotPatternFromUrl(targetUrl);
         const name = window.prompt("Enter a name for this snapshot:", `Sequence-${pattern}`);
         if (!name) return;
 
         const method = state.requests.find(r => r.url === targetUrl)?.method || "GET";
         const selectedReqs = state.requests
-          .filter((r) => r.method === method && mockPatternFromUrl(r.url) === pattern && r.status !== "pending")
+          .filter((r) => r.method === method && snapshotPatternFromUrl(r.url) === pattern && r.status !== "pending")
           .sort((a, b) => new Date(a.startedAt) - new Date(b.startedAt));
 
         if (selectedReqs.length === 0) {
@@ -2744,6 +2797,40 @@
     root.querySelectorAll("[data-close-settings-modal]").forEach((el) => {
       el.addEventListener("click", () => {
         state.showSettingsModal = false;
+        notify();
+      });
+    });
+    root.querySelector("[data-add-snapshot-url-strip-rule]")?.addEventListener("click", () => {
+      state.snapshotUrlStripRules.push({ type: "string", value: "" });
+      persistSnapshotUrlStripRules();
+      notify();
+    });
+    root.querySelectorAll("[data-snapshot-url-strip-type]").forEach((select) => {
+      select.addEventListener("change", () => {
+        const index = Number(select.getAttribute("data-snapshot-url-strip-type"));
+        const rule = state.snapshotUrlStripRules[index];
+        if (!rule) return;
+        rule.type = select.value === "regex" ? "regex" : "string";
+        persistSnapshotUrlStripRules();
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-snapshot-url-strip-value]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const index = Number(input.getAttribute("data-snapshot-url-strip-value"));
+        const rule = state.snapshotUrlStripRules[index];
+        if (!rule) return;
+        rule.value = input.value;
+        persistSnapshotUrlStripRules();
+        notify();
+      });
+    });
+    root.querySelectorAll("[data-remove-snapshot-url-strip-rule]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const index = Number(button.getAttribute("data-remove-snapshot-url-strip-rule"));
+        if (!Number.isInteger(index) || index < 0 || index >= state.snapshotUrlStripRules.length) return;
+        state.snapshotUrlStripRules.splice(index, 1);
+        persistSnapshotUrlStripRules();
         notify();
       });
     });
@@ -3387,10 +3474,24 @@
         state.serviceWorkerReady &&
         navigator.serviceWorker?.controller
     );
+    const snapshotUrlStripRules = normalizeSnapshotUrlStripRules(state.snapshotUrlStripRules);
+    const snapshotUrlStripRuleRows = snapshotUrlStripRules.map((rule, index) => {
+      const regexInvalid = rule.type === "regex" && rule.value && !isValidSnapshotUrlStripRegex(rule.value);
+      return `
+        <div class="snapshot-url-strip-rule">
+          <select data-snapshot-url-strip-type="${index}" aria-label="URL removal rule type">
+            <option value="string" ${rule.type === "string" ? "selected" : ""}>String</option>
+            <option value="regex" ${rule.type === "regex" ? "selected" : ""}>Regex</option>
+          </select>
+          <input type="text" data-snapshot-url-strip-value="${index}" value="${escapeAttr(rule.value)}" placeholder="/test/a/b" aria-label="URL text or regular expression" ${regexInvalid ? 'class="invalid" title="Invalid regular expression; this rule will be ignored" aria-invalid="true"' : ""} />
+          <button type="button" class="danger-text-btn" data-remove-snapshot-url-strip-rule="${index}" aria-label="Remove URL removal rule">Remove</button>
+        </div>
+      `;
+    }).join("");
     
     return `
       <div class="modal-overlay inline-style-52ecd228" data-close-settings-modal>
-        <div class="modal-card inline-style-57e41c3b" onclick="event.stopPropagation();">
+        <div class="modal-card settings-modal-card inline-style-57e41c3b" onclick="event.stopPropagation();">
           <div class="modal-header inline-style-7ebc7e67">
             <h3 class="inline-style-a57ba1a3">Settings</h3>
             <button type="button" class="close-btn inline-style-df603a6e" data-close-settings-modal>&times;</button>
@@ -3409,6 +3510,15 @@
                 <span class="sw-status-dot ${isSwActive ? "active" : "inactive"}"></span>
                 <span>${isSwActive ? 'Active (Controlling native network requests)' : 'Inactive (Falling back to JS Fetch/XHR interceptor)'}</span>
               </div>
+            </div>
+
+            <div class="settings-group inline-style-5f6b5dd6">
+              <label class="inline-style-3af47968">Remove URL text from saved Snapshots</label>
+              <div class="inline-style-ee32b08f">Patterns are removed from request URLs before new Snapshots are saved. String removes exact text; Regex removes every match.</div>
+              <div class="snapshot-url-strip-rules">
+                ${snapshotUrlStripRuleRows || '<div class="snapshot-url-strip-empty">No URL removal rules</div>'}
+              </div>
+              <button type="button" class="secondary-btn snapshot-url-strip-add" data-add-snapshot-url-strip-rule>Add rule</button>
             </div>
 
             <div class="settings-group inline-style-5f6b5dd6">
@@ -3444,6 +3554,7 @@
     state.selectedSnapshotStepIdx = null;
     state.pendingSnapshotStepScroll = null;
     state.mockEnabled = true;
+    state.snapshotUrlStripRules = [];
     state.activeRightTab = "mocks";
     state.mockGroupSelectionMode = false;
     state.selectedMockGroupKeys.clear();
@@ -3463,6 +3574,7 @@
     safeLocalStorageRemove("embedded-devtools-snapshots");
     safeLocalStorageRemove("embedded-devtools-active-snapshot-id");
     safeLocalStorageRemove("embedded-devtools-mock-enabled");
+    safeLocalStorageRemove(SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY);
     safeLocalStorageRemove("embedded-devtools-details-layout");
 
     // Wait for an older debounced write to finish before writing the empty
@@ -4222,6 +4334,9 @@
   function endpointDetailTemplate(group) {
     const selected = group.mocks.find((mock) => mock.id === state.selectedMockId) || group.mocks[0];
     const editorId = selected?.id || group.mocks[0]?.id || "";
+    const mockGroups = getMockGroups();
+    const groupIndex = mockGroups.findIndex((mockGroup) => mockGroup.key === group.key);
+    const canReorderGroup = groupIndex !== -1 && !state.pendingMockId;
     const isRequestBodyCollapsed = state.collapsedSections.has("Mock Rule Request Body");
     const isMetadataCollapsed = state.collapsedSections.has("Mock Rule Metadata");
     return `
@@ -4232,9 +4347,20 @@
               ${["GET", "POST", "PUT", "PATCH", "DELETE", "ALL"].map((method) => `<option ${group.method === method ? "selected" : ""}>${method}</option>`).join("")}
             </select>
           </label>
-        <label class="inline-style-82a068eb">URL contains or /regex/
-          <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
-        </label>
+        <div class="inline-style-82a068eb mock-rule-url-field">
+          <span>URL contains or /regex/</span>
+          <div class="mock-rule-url-control">
+            <input value="${escapeAttr(group.pattern)}" data-group-field="pattern" data-group-key="${escapeAttr(group.key)}" data-group-editor-id="${escapeAttr(editorId)}" />
+            <div class="mock-rule-order-controls" aria-label="Mock rule order">
+              <button type="button" data-move-mock-group-up="${escapeAttr(editorId)}" aria-label="Move rule up" title="Move rule up in Mock Rules" ${!canReorderGroup || groupIndex === 0 ? "disabled" : ""}>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4" /></svg>
+              </button>
+              <button type="button" data-move-mock-group-down="${escapeAttr(editorId)}" aria-label="Move rule down" title="Move rule down in Mock Rules" ${!canReorderGroup || groupIndex === mockGroups.length - 1 ? "disabled" : ""}>
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
         </div>
         <div class="code-section${isRequestBodyCollapsed ? " is-collapsed" : ""} inline-style-7f3cbaf6" data-section-title="Mock Rule Request Body">
           <h3 data-section-toggle class="inline-style-d7069fd9">
@@ -6167,6 +6293,16 @@
         color: #334155 !important;
         cursor: pointer;
       }
+      .snapshot-url-strip-rules { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+      .settings-modal-card .modal-body { max-height: 70vh; overflow-y: auto; }
+      .snapshot-url-strip-rule { display: flex; align-items: center; gap: 6px; }
+      .snapshot-url-strip-rule select { width: 76px; flex: 0 0 auto; }
+      .snapshot-url-strip-rule input { flex: 1; min-width: 0; }
+      .snapshot-url-strip-rule select,
+      .snapshot-url-strip-rule input { box-sizing: border-box; min-height: 28px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 4px; font: inherit; }
+      .snapshot-url-strip-rule input.invalid { border-color: #dc2626; background: #fef2f2; }
+      .snapshot-url-strip-empty { color: #94a3b8; font-size: 11px; padding: 4px 0; }
+      .snapshot-url-strip-add { align-self: flex-start; margin-top: 8px; padding: 4px 8px; }
       .settings-radio-label input {
         appearance: none;
         -webkit-appearance: none;
@@ -6374,6 +6510,15 @@
       .inline-style-ccfb99cb { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
       .inline-style-d132b26d { width: 80px; flex-shrink: 0; margin-bottom: 0; }
       .inline-style-82a068eb { flex-grow: 1; margin-bottom: 0; }
+      .mock-rule-url-field { display: grid; gap: 4px; min-width: 0; }
+      .mock-rule-url-control { display: flex; align-items: center; gap: 5px; min-width: 0; }
+      .mock-rule-url-control > input { width: auto; min-width: 0; flex: 1; }
+      .mock-rule-order-controls { display: flex; flex: 0 0 auto; flex-direction: column; gap: 2px; }
+      .mock-rule-order-controls button { align-items: center; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; color: #526070; cursor: pointer; display: inline-flex; height: 16px; justify-content: center; min-height: 16px; padding: 0; width: 24px; }
+      .mock-rule-order-controls button:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
+      .mock-rule-order-controls button:disabled { cursor: not-allowed; opacity: .35; }
+      .mock-rule-order-controls button:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+      .mock-rule-order-controls svg { fill: none; height: 12px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 12px; }
       .inline-style-7f3cbaf6 { margin-bottom: 8px; }
       .inline-style-7f3cbaf6 [data-format-group-field] {
         position: absolute;
@@ -6946,6 +7091,32 @@
     return shortUrl(url) || String(url || "");
   }
 
+  function snapshotPatternFromUrl(url) {
+    let sanitizedUrl = String(url || "");
+    state.snapshotUrlStripRules.forEach((rule) => {
+      if (!rule.value) return;
+      if (rule.type === "regex") {
+        try {
+          sanitizedUrl = sanitizedUrl.replace(new RegExp(rule.value, "g"), "");
+        } catch (_error) {
+          // Ignore invalid expressions so they cannot prevent Snapshot capture.
+        }
+      } else {
+        sanitizedUrl = sanitizedUrl.split(rule.value).join("");
+      }
+    });
+    return mockPatternFromUrl(sanitizedUrl);
+  }
+
+  function isValidSnapshotUrlStripRegex(value) {
+    try {
+      new RegExp(value);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function countMocksForEndpoint(method, pattern) {
     const normalizedMethod = String(method || "GET").toUpperCase();
     return state.mocks.filter((mock) => {
@@ -7059,6 +7230,23 @@
       if (mock.enabled && !group.activeMock) group.activeMock = mock;
     });
     return groups;
+  }
+
+  function moveMockGroup(mockId, direction) {
+    if (state.pendingMockId) return;
+    const targetMock = state.mocks.find((mock) => mock.id === mockId);
+    if (!targetMock) return;
+
+    const groups = getMockGroups();
+    const currentIndex = groups.findIndex((group) => group.key === mockActivationKey(targetMock));
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= groups.length) return;
+
+    const orderedGroupMocks = groups.map((group) => group.mocks);
+    [orderedGroupMocks[currentIndex], orderedGroupMocks[targetIndex]] =
+      [orderedGroupMocks[targetIndex], orderedGroupMocks[currentIndex]];
+    state.mocks = orderedGroupMocks.flat();
+    saveMocks();
   }
 
   function getMocksForGroupKey(groupKey) {

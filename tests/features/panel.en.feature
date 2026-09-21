@@ -658,3 +658,30 @@ Feature: Complete Embedded MockTools Panel behavior
     Then a new array should preserve record order
     When clearRequests is called
     Then records and selection should clear and rendering should be notified
+
+  @settings @PANEL-081
+  Scenario: Persist Snapshot URL removal rules in Settings
+    When I add String and Regex rules and reopen Settings
+    Then both rule types and expressions should remain
+    And deleting a rule should persist that change
+
+  @snapshot @PANEL-082
+  Scenario: Remove matching URL fragments before saving a Snapshot
+    Given String "/test/a/b" and Regex "/v\d+" are configured
+    And the request URL is "https://example.test/test/a/b/v2/users"
+    When I save a Snapshot containing that request
+    Then the Snapshot rule URL should be "/users"
+    And the original URL in request history should remain unchanged
+
+  @mock @PANEL-083
+  Scenario: Change Mock Rule order from the editor
+    Given the current rule is neither first nor last in the Mock Rules list
+    When I click the up or down button beside its URL field
+    Then the entire rule and its Configs should move one position in the list
+    And the new order should persist and affect matching between equally specific Mocks
+
+  @mock @PANEL-084
+  Scenario: Insert two spaces for Tab in the Request Body Match Key
+    When I press Tab in the Request Body Match Key textarea
+    Then two spaces should be inserted at the caret instead of moving focus
+    And the inserted value should be saved to its rule

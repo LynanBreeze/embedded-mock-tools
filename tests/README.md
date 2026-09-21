@@ -7,7 +7,7 @@ The repository does not contain a `panel.js` source file. The runnable panel and
 - `features/panel.zh-CN.feature`: Chinese BDD specification.
 - `features/panel.en.feature`: English BDD specification with matching case IDs.
 
-Both files describe the same 80 cases. A change to one language must preserve the corresponding `@PANEL-NNN` case in the other language.
+Both files describe the same 84 cases. A change to one language must preserve the corresponding `@PANEL-NNN` case in the other language.
 
 Validate bilingual parity without installing a test framework:
 
@@ -27,9 +27,11 @@ node tests/validate-feature-parity.mjs
 | Matching and exclusivity | 036–042 | substring/regex, ALL, priority, cache, global enable, one-active rule |
 | Request history and panel shell | 043–049 | history cap, filters, details, clear, open/close, floating position |
 | Mock rule management | 050–057 | create/edit/config/group/template/delete/bulk/context menu |
+| Mock rule ordering and editing | 083–084 | reorder endpoint rules, persist matching priority, and indent Request Body with Tab |
 | Snapshot management/playback | 058–066 | capture, precedence, overflow, editing, steps, activation/deletion |
 | Import/export | 067–071 | Mock and Snapshot backup success/error/file-shape paths |
-| Settings, rendering, utilities and API | 072–080 | settings/reset, JSON/escaping, parsing, copy, batching, public API |
+| Settings, rendering, utilities and API | 072–081 | settings/reset and URL removal rules, JSON/escaping, parsing, copy, batching, public API |
+| Snapshot URL normalization | 082 | string and regex URL removal before Snapshot persistence |
 
 ## Execution levels
 
