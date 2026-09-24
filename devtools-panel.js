@@ -109,7 +109,12 @@
       mountPanel();
       installFetchInterceptor();
       installXhrInterceptor();
-      hydrateMocks(initOptions.seedMocks || [], lifecycle);
+      hydrateMocks(
+        initOptions.seedMocks || [],
+        initOptions.seedSnapshots || [],
+        initOptions.seedActiveSnapshotId || null,
+        lifecycle
+      );
       updateStorageEstimate();
       setupServiceWorker(lifecycle);
     } catch (error) {
@@ -240,7 +245,7 @@
     }
   }
 
-  async function hydrateMocks(seedMocks, lifecycle) {
+  async function hydrateMocks(seedMocks, seedSnapshots, seedActiveSnapshotId, lifecycle) {
     const persistedMockEnabled = await readPersistedMockEnabled();
     if (!isCurrentLifecycle(lifecycle)) return;
     state.mockEnabled = persistedMockEnabled;
@@ -253,8 +258,14 @@
 
     const persistedSnapshots = await readPersistedSnapshots();
     if (!isCurrentLifecycle(lifecycle)) return;
-    state.snapshots = persistedSnapshots || [];
-    state.activeSnapshotId = await readActiveSnapshotId();
+    const snapshotsWereSeeded = persistedSnapshots === null;
+    state.snapshots = snapshotsWereSeeded ? normalizeSnapshots(seedSnapshots) : persistedSnapshots;
+    const persistedActiveSnapshotId = await readActiveSnapshotId();
+    state.activeSnapshotId = persistedActiveSnapshotId || (
+      snapshotsWereSeeded && state.snapshots.some((snapshot) => snapshot.id === seedActiveSnapshotId)
+        ? seedActiveSnapshotId
+        : null
+    );
     if (!isCurrentLifecycle(lifecycle)) return;
 
     if (state.activeSnapshotId) {
@@ -267,7 +278,9 @@
 
     state.persistenceReady = true;
     if (state.mocks.length) persistMocks(state.mocks);
+    if (snapshotsWereSeeded && state.snapshots.length) persistSnapshots(state.snapshots);
     persistMockEnabled(state.mockEnabled);
+    if (snapshotsWereSeeded && state.activeSnapshotId) persistActiveSnapshotId(state.activeSnapshotId);
     syncServiceWorkerMocks();
     syncServiceWorkerSnapshot();
     notify();
@@ -275,6 +288,19 @@
 
   function normalizeMocks(mocks) {
     return Array.isArray(mocks) ? mocks.map((mock, index) => normalizeMock(mock, index)) : [];
+  }
+
+  function normalizeSnapshots(snapshots) {
+    return Array.isArray(snapshots)
+      ? snapshots
+        .filter((snapshot) => snapshot && typeof snapshot === "object")
+        .map((snapshot, index) => ({
+          id: snapshot.id || `snap-${Date.now()}-${index}`,
+          name: snapshot.name || `Snapshot ${index + 1}`,
+          createdAt: snapshot.createdAt || new Date().toISOString(),
+          rules: Array.isArray(snapshot.rules) ? snapshot.rules : []
+        }))
+      : [];
   }
 
   function normalizeMock(mock, index) {
@@ -558,9 +584,9 @@
     }
     try {
       const saved = safeJsonParse(safeLocalStorageGet("embedded-devtools-snapshots"), null);
-      return Array.isArray(saved) ? saved : [];
+      return Array.isArray(saved) ? saved : null;
     } catch (_error) {
-      return [];
+      return null;
     }
   }
 

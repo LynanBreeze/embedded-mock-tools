@@ -69,7 +69,13 @@ window.MockTools.init({
   buttonPosition: "bottom-left",
 
   // Mock list used on first initialization
-  seedMocks: []
+  seedMocks: [],
+
+  // Snapshot list used on first initialization
+  seedSnapshots: [],
+
+  // Optional Snapshot ID to enable on first initialization
+  seedActiveSnapshotId: null
 });
 ```
 

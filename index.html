@@ -151,7 +151,39 @@
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ orderId: "MOCK-2026", state: "created" }, null, 2)
           }
-        ]
+        ],
+        seedSnapshots: [
+          {
+            id: "demo-order-flow",
+            name: "Order processing flow",
+            createdAt: "2026-09-24T00:00:00.000Z",
+            rules: [
+              {
+                id: "demo-order-flow-rule",
+                method: "POST",
+                pattern: "/api/orders",
+                overflow: "repeat-last",
+                responses: [
+                  {
+                    requestBody: "",
+                    status: 202,
+                    delay: 180,
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ orderId: "SNAP-2026", state: "processing" }, null, 2)
+                  },
+                  {
+                    requestBody: "",
+                    status: 200,
+                    delay: 180,
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ orderId: "SNAP-2026", state: "completed" }, null, 2)
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        seedActiveSnapshotId: "demo-order-flow"
       });
 
       const appLog = document.querySelector("#appLog");
