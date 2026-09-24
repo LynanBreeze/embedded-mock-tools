@@ -10,6 +10,7 @@
   const ACTIVE_SNAPSHOT_ID_KEY = "active_snapshot_id";
   const MOCK_ENABLED_KEY = "mock_enabled";
   const SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY = "embedded-devtools-snapshot-url-strip-rules";
+  const TYPESCRIPT_EXPORT_STORAGE_KEY = "embedded-devtools-typescript-export";
   const MAX_REQUESTS = 200;
   const MAX_RESPONSE_BODY_BYTES = 256 * 1024;
   const SERVICE_WORKER_SCRIPT_NAME = "mocktools-sw.js";
@@ -41,6 +42,7 @@
     floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: safeLocalStorageGet("embedded-devtools-mock-enabled") !== "false",
+    exportGeneratedTypeScript: safeLocalStorageGet(TYPESCRIPT_EXPORT_STORAGE_KEY) === "true",
     selectedMockGroupTab: "all",
     lastGroupKey: null,
     activeRightTab: "mocks",
@@ -658,6 +660,10 @@
       SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY,
       JSON.stringify(normalizeSnapshotUrlStripRules(state.snapshotUrlStripRules))
     );
+  }
+
+  function persistTypeScriptExportSetting() {
+    safeLocalStorageSet(TYPESCRIPT_EXPORT_STORAGE_KEY, String(Boolean(state.exportGeneratedTypeScript)));
   }
 
   function normalizeSnapshotUrlStripRules(rules) {
@@ -2991,6 +2997,11 @@
         notify();
       });
     });
+    root.querySelector("[data-typescript-export]")?.addEventListener("change", (event) => {
+      state.exportGeneratedTypeScript = Boolean(event.target.checked);
+      persistTypeScriptExportSetting();
+      notify();
+    });
     root.querySelector("[data-reset-settings]")?.addEventListener("click", resetToInitialState);
 
     root.querySelectorAll(".close-btn[data-close-details-modal]").forEach((el) => {
@@ -3679,6 +3690,14 @@
             </div>
 
             <div class="settings-group inline-style-5f6b5dd6">
+              <label class="inline-style-3af47968">Generated TypeScript</label>
+              <label class="settings-checkbox-label">
+                <input type="checkbox" data-typescript-export ${state.exportGeneratedTypeScript ? "checked" : ""} />
+                <span>Add <code>export</code> before generated interfaces</span>
+              </label>
+            </div>
+
+            <div class="settings-group inline-style-5f6b5dd6">
               <label class="inline-style-3af47968">Version</label>
               <div class="inline-style-ee32b08f">1.0.38</div>
             </div>
@@ -3711,6 +3730,7 @@
     state.selectedSnapshotStepIdx = null;
     state.pendingSnapshotStepScroll = null;
     state.mockEnabled = true;
+    state.exportGeneratedTypeScript = false;
     state.snapshotUrlStripRules = [];
     state.activeRightTab = "mocks";
     state.mockGroupSelectionMode = false;
@@ -3732,6 +3752,7 @@
     safeLocalStorageRemove("embedded-devtools-active-snapshot-id");
     safeLocalStorageRemove("embedded-devtools-mock-enabled");
     safeLocalStorageRemove(SNAPSHOT_URL_STRIP_RULES_STORAGE_KEY);
+    safeLocalStorageRemove(TYPESCRIPT_EXPORT_STORAGE_KEY);
     safeLocalStorageRemove("embedded-devtools-details-layout");
 
     // Wait for an older debounced write to finish before writing the empty
@@ -4771,11 +4792,11 @@
       const body = fields.length
         ? fields.map(({ key, type }) => `  ${key}: ${type};`).join("\n")
         : "  // No properties";
-      return `interface ${name} {\n${body}\n}`;
+      return `${state.exportGeneratedTypeScript ? "export " : ""}interface ${name} {\n${body}\n}`;
     });
 
     if (interfaces.length === 0 || interfaces[0].name !== rootType) {
-      declarations.unshift(`type ${safeRootName} = ${rootType};`);
+      declarations.unshift(`${state.exportGeneratedTypeScript ? "export " : ""}type ${safeRootName} = ${rootType};`);
     }
     return declarations.join("\n\n");
   }
@@ -6565,9 +6586,7 @@
       }
       @media (max-width: 900px) {
         .devtools { left: 0; right: 0; height: 92vh; }
-        .grid { grid-template-columns: 1fr; grid-template-rows: 150px 1fr 440px; }
         .request-list, .detail { border-bottom: 1px solid #d9e1ee; border-right: 0; }
-        .mock-layout { grid-template-rows: 120px 1fr; }
       }
       /* Extracted from former inline template styles. */
       .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; }
@@ -6578,6 +6597,34 @@
       .inline-style-fe5ec6f6 { padding: 16px; font-size: 12px; color: #334155; }
       .inline-style-3af47968 { display: block; font-weight: 600; color: #475569; margin-bottom: 4px; }
       .inline-style-ee32b08f { font-size: 11px; color: #64748b; margin-top: 4px; }
+      .settings-checkbox-label { align-items: center; color: #526070; display: flex; flex-direction: row; gap: 8px; line-height: 1.4; margin-top: 8px; }
+      .settings-checkbox-label input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        background: #fff;
+        border: 1px solid #94a3b8;
+        border-radius: 3px;
+        cursor: pointer;
+        flex: 0 0 14px;
+        height: 14px;
+        margin: 0;
+        min-height: 14px;
+        padding: 0;
+        position: relative;
+        width: 14px;
+      }
+      .settings-checkbox-label input[type="checkbox"]:checked { background: #18a67d; border-color: #18a67d; }
+      .settings-checkbox-label input[type="checkbox"]:checked::after {
+        color: #fff;
+        content: "✓";
+        font-size: 10px;
+        font-weight: 700;
+        left: 2px;
+        line-height: 12px;
+        position: absolute;
+        top: 0;
+      }
+      .settings-checkbox-label input[type="checkbox"]:focus-visible { outline: 2px solid rgba(24,166,125,.35); outline-offset: 2px; }
       .inline-style-5f6b5dd6 { margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px; }
       .inline-style-4de12c33 { padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; }
       .inline-style-1c132269 { margin-right: auto; }
