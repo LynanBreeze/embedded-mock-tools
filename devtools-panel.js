@@ -26,7 +26,12 @@
     persistenceError: "",
     serviceWorkerReady: false,
     serviceWorkerRegistration: null,
+    serviceWorkerControllerChangeHandler: null,
+    serviceWorkerFocusHandler: null,
+    serviceWorkerVisibilityHandler: null,
     useServiceWorker: false,
+    panelHost: null,
+    panelOutsidePointerHandler: null,
     requests: [],
     snapshotUrlStripRules: [],
     mocks: [],
@@ -51,7 +56,10 @@
     selectedSnapshotIds: new Set(),
     subscribers: new Set(),
     originalFetch: null,
+    originalFetchFunction: null,
+    interceptedFetch: null,
     OriginalXHR: null,
+    InterceptedXHR: null,
     showSettingsModal: false,
     confirmDialog: null,
     storageUsage: null,
@@ -75,12 +83,21 @@
   let mocksPersistenceWritePromise = null;
   let serviceWorkerMocksVersion = 0;
   let serviceWorkerRecoveryPromise = null;
+  let lifecycleVersion = 0;
+  let originalServiceWorkerRegister = null;
+  let wrappedServiceWorkerRegister = null;
+  let originalServiceWorkerUnregister = null;
+  let wrappedServiceWorkerUnregister = null;
 
   function init(options = {}) {
     if (state.installed) return api;
+    const lifecycle = ++lifecycleVersion;
     const initOptions = options && typeof options === "object" ? options : {};
     try {
+      state.installed = true;
+      state.persistenceReady = false;
       state.originalFetch = window.fetch ? window.fetch.bind(window) : null;
+      state.originalFetchFunction = window.fetch || null;
       state.OriginalXHR = window.XMLHttpRequest;
       state.useServiceWorker = initOptions.useServiceWorker !== false && canUseServiceWorker();
       state.mocks = enforceSingleActivePerEndpoint(normalizeMocks(initOptions.seedMocks || []));
@@ -90,16 +107,115 @@
       mountPanel();
       installFetchInterceptor();
       installXhrInterceptor();
-      state.installed = true;
-      hydrateMocks(initOptions.seedMocks || []);
+      hydrateMocks(initOptions.seedMocks || [], lifecycle);
       updateStorageEstimate();
-      setupServiceWorker();
+      setupServiceWorker(lifecycle);
     } catch (error) {
       state.installed = false;
       state.persistenceError = error.message || "MockTools initialization failed";
       throw error;
     }
     return api;
+  }
+
+  async function unregister() {
+    if (!state.installed && !state.panelHost && !state.serviceWorkerRegistration) return;
+
+    state.installed = false;
+    ++lifecycleVersion;
+    state.useServiceWorker = false;
+    state.serviceWorkerReady = false;
+
+    if (state.originalFetchFunction && window.fetch === state.interceptedFetch) {
+      window.fetch = state.originalFetchFunction;
+    }
+    if (state.InterceptedXHR && window.XMLHttpRequest === state.InterceptedXHR) {
+      window.XMLHttpRequest = state.OriginalXHR;
+    }
+    state.originalFetch = null;
+    state.originalFetchFunction = null;
+    state.interceptedFetch = null;
+    state.InterceptedXHR = null;
+
+    if (state.serviceWorkerControllerChangeHandler) {
+      navigator.serviceWorker?.removeEventListener("controllerchange", state.serviceWorkerControllerChangeHandler);
+    }
+    if (state.serviceWorkerFocusHandler) window.removeEventListener("focus", state.serviceWorkerFocusHandler);
+    if (state.serviceWorkerVisibilityHandler) {
+      document.removeEventListener("visibilitychange", state.serviceWorkerVisibilityHandler);
+    }
+    if (state.panelOutsidePointerHandler) {
+      window.removeEventListener("pointerdown", state.panelOutsidePointerHandler);
+    }
+    state.serviceWorkerControllerChangeHandler = null;
+    state.serviceWorkerFocusHandler = null;
+    state.serviceWorkerVisibilityHandler = null;
+    state.panelOutsidePointerHandler = null;
+
+    const registration = state.serviceWorkerRegistration;
+    const workers = new Set([
+      navigator.serviceWorker?.controller,
+      registration?.active,
+      registration?.waiting,
+      registration?.installing
+    ].filter(Boolean));
+    const version = Math.max(Date.now(), serviceWorkerMocksVersion + 1);
+    serviceWorkerMocksVersion = version;
+    workers.forEach((worker) => {
+      try {
+        worker.postMessage({ type: "MOCKTOOLS_UPDATE_MOCKS", version, mocks: [] });
+        worker.postMessage({ type: "MOCKTOOLS_UPDATE_SNAPSHOT", activeSnapshotRules: null });
+      } catch (_error) {}
+    });
+
+    if (registration) {
+      const unregisterWorker = originalServiceWorkerUnregister ||
+        (typeof ServiceWorkerRegistration !== "undefined" ? ServiceWorkerRegistration.prototype.unregister : null);
+      if (typeof unregisterWorker === "function") {
+        try {
+          await unregisterWorker.call(registration);
+        } catch (_error) {}
+      }
+    }
+    state.serviceWorkerRegistration = null;
+    state.expanded = false;
+    state.mockEnabled = false;
+    state.mocks = [];
+    state.snapshots = [];
+    state.activeSnapshotId = null;
+    state.selectedSnapshotId = null;
+    state.subscribers.clear();
+
+    if (pendingRenderFrame !== null) {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(pendingRenderFrame);
+      else window.clearTimeout(pendingRenderFrame);
+      pendingRenderFrame = null;
+    }
+    if (document.body?.dataset.prevOverflow !== undefined) {
+      document.body.style.overflow = document.body.dataset.prevOverflow;
+      delete document.body.dataset.prevOverflow;
+    }
+    state.panelHost?.remove();
+    state.panelHost = null;
+
+    if (navigator.serviceWorker && wrappedServiceWorkerRegister &&
+        navigator.serviceWorker.register === wrappedServiceWorkerRegister) {
+      navigator.serviceWorker.register = originalServiceWorkerRegister;
+      delete navigator.serviceWorker.__mocktoolsShielded;
+    }
+    if (typeof ServiceWorkerRegistration !== "undefined" && wrappedServiceWorkerUnregister &&
+        ServiceWorkerRegistration.prototype.unregister === wrappedServiceWorkerUnregister) {
+      ServiceWorkerRegistration.prototype.unregister = originalServiceWorkerUnregister;
+      delete ServiceWorkerRegistration.prototype.__mocktoolsShielded;
+    }
+    wrappedServiceWorkerRegister = null;
+    wrappedServiceWorkerUnregister = null;
+    originalServiceWorkerRegister = null;
+    originalServiceWorkerUnregister = null;
+  }
+
+  function isCurrentLifecycle(lifecycle) {
+    return state.installed && lifecycle === lifecycleVersion;
   }
 
   async function updateStorageEstimate() {
@@ -122,18 +238,22 @@
     }
   }
 
-  async function hydrateMocks(seedMocks) {
+  async function hydrateMocks(seedMocks, lifecycle) {
     const persistedMockEnabled = await readPersistedMockEnabled();
+    if (!isCurrentLifecycle(lifecycle)) return;
     state.mockEnabled = persistedMockEnabled;
 
     const persistedMocks = await readPersistedMocks();
+    if (!isCurrentLifecycle(lifecycle)) return;
     const mocks = persistedMocks !== null ? persistedMocks : normalizeMocks(seedMocks);
     state.mocks = enforceSingleActivePerEndpoint(mocks);
     state.selectedMockId = null;
 
     const persistedSnapshots = await readPersistedSnapshots();
+    if (!isCurrentLifecycle(lifecycle)) return;
     state.snapshots = persistedSnapshots || [];
     state.activeSnapshotId = await readActiveSnapshotId();
+    if (!isCurrentLifecycle(lifecycle)) return;
 
     if (state.activeSnapshotId) {
       state.activeRightTab = "snapshots";
@@ -200,7 +320,7 @@
     if (typeof ServiceWorkerRegistration !== "undefined" && ServiceWorkerRegistration.prototype) {
       const originalUnregister = ServiceWorkerRegistration.prototype.unregister;
       if (originalUnregister && !ServiceWorkerRegistration.prototype.__mocktoolsShielded) {
-        ServiceWorkerRegistration.prototype.unregister = async function (...args) {
+        const shieldedUnregister = async function (...args) {
           const scriptURL =
             this.active?.scriptURL ||
             this.waiting?.scriptURL ||
@@ -212,13 +332,17 @@
           }
           return originalUnregister.apply(this, args);
         };
+        originalServiceWorkerUnregister = originalUnregister;
+        wrappedServiceWorkerUnregister = shieldedUnregister;
+        ServiceWorkerRegistration.prototype.unregister = shieldedUnregister;
         ServiceWorkerRegistration.prototype.__mocktoolsShielded = true;
       }
     }
 
     if (navigator.serviceWorker && !navigator.serviceWorker.__mocktoolsShielded) {
+      originalServiceWorkerRegister = navigator.serviceWorker.register;
       const originalRegister = navigator.serviceWorker.register.bind(navigator.serviceWorker);
-      navigator.serviceWorker.register = async function (scriptURL, options) {
+      const shieldedRegister = async function (scriptURL, options) {
         const isMockToolsSW = typeof scriptURL === "string" && scriptURL.includes(SERVICE_WORKER_SCRIPT_NAME);
         const regPromise = originalRegister(scriptURL, options);
 
@@ -232,6 +356,8 @@
         }
         return regPromise;
       };
+      navigator.serviceWorker.register = shieldedRegister;
+      wrappedServiceWorkerRegister = shieldedRegister;
       navigator.serviceWorker.__mocktoolsShielded = true;
     }
   }
@@ -244,28 +370,41 @@
     }
   }
 
-  async function setupServiceWorker() {
+  async function setupServiceWorker(lifecycle) {
     if (!state.useServiceWorker) return;
     try {
       installServiceWorkerShield();
       const registration = await registerServiceWorker();
+      if (!isCurrentLifecycle(lifecycle)) {
+        if (originalServiceWorkerUnregister) await originalServiceWorkerUnregister.call(registration).catch(() => {});
+        return;
+      }
       state.serviceWorkerRegistration = registration;
       await navigator.serviceWorker.ready;
+      if (!isCurrentLifecycle(lifecycle)) {
+        if (originalServiceWorkerUnregister) await originalServiceWorkerUnregister.call(registration).catch(() => {});
+        return;
+      }
       state.serviceWorkerReady = isMockToolsController();
       syncServiceWorkerMocks();
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
+      state.serviceWorkerControllerChangeHandler = () => {
+        if (!isCurrentLifecycle(lifecycle)) return;
         state.serviceWorkerReady = isMockToolsController();
         syncServiceWorkerMocks();
         syncServiceWorkerSnapshot();
         notify();
-      });
-      window.addEventListener("focus", () => recoverServiceWorker());
-      document.addEventListener("visibilitychange", () => {
+      };
+      state.serviceWorkerFocusHandler = () => recoverServiceWorker();
+      state.serviceWorkerVisibilityHandler = () => {
         if (document.visibilityState === "visible") recoverServiceWorker();
-      });
+      };
+      navigator.serviceWorker.addEventListener("controllerchange", state.serviceWorkerControllerChangeHandler);
+      window.addEventListener("focus", state.serviceWorkerFocusHandler);
+      document.addEventListener("visibilitychange", state.serviceWorkerVisibilityHandler);
       if (!isMockToolsController()) recoverServiceWorker();
       notify();
     } catch (error) {
+      if (!isCurrentLifecycle(lifecycle)) return;
       state.serviceWorkerReady = false;
       state.useServiceWorker = false;
       state.persistenceError = error.message || "Service Worker unavailable";
@@ -277,14 +416,23 @@
     if (!state.useServiceWorker) return;
     if (!force && isMockToolsController()) return;
     if (serviceWorkerRecoveryPromise) return serviceWorkerRecoveryPromise;
+    const lifecycle = lifecycleVersion;
 
     serviceWorkerRecoveryPromise = (async () => {
       try {
         const registration = state.serviceWorkerRegistration ||
           await registerServiceWorker();
+        if (!isCurrentLifecycle(lifecycle)) {
+          if (originalServiceWorkerUnregister) await originalServiceWorkerUnregister.call(registration).catch(() => {});
+          return;
+        }
         state.serviceWorkerRegistration = registration;
         await registration.update().catch(() => {});
         const readyRegistration = await navigator.serviceWorker.ready;
+        if (!isCurrentLifecycle(lifecycle)) {
+          if (originalServiceWorkerUnregister) await originalServiceWorkerUnregister.call(readyRegistration).catch(() => {});
+          return;
+        }
         state.serviceWorkerRegistration = readyRegistration;
         if (readyRegistration.active && !isMockToolsController()) {
           readyRegistration.active.postMessage({ type: "MOCKTOOLS_CLAIM_CLIENT" });
@@ -293,6 +441,7 @@
         syncServiceWorkerMocks();
         syncServiceWorkerSnapshot();
       } catch (error) {
+        if (!isCurrentLifecycle(lifecycle)) return;
         state.serviceWorkerReady = false;
         state.persistenceError = error.message || "Service Worker recovery failed";
       } finally {
@@ -604,7 +753,9 @@
 
   function installFetchInterceptor() {
     if (!state.originalFetch) return;
-    window.fetch = async function interceptedFetch(input, initOptions = {}) {
+    const originalFetch = state.originalFetch;
+    const lifecycle = lifecycleVersion;
+    state.interceptedFetch = async function interceptedFetch(input, initOptions = {}) {
       const fetchInit = initOptions == null ? {} : initOptions;
       const startedAt = performance.now();
       const request = createFetchRecord(input, fetchInit);
@@ -616,6 +767,7 @@
       if (snapshotMock && !shouldLetServiceWorkerMock()) {
         try {
           await wait(snapshotMock.delay);
+          if (!isCurrentLifecycle(lifecycle)) return originalFetch(input, fetchInit);
           const response = createMockResponse(snapshotMock);
           finishRequest(request.id, {
             status: normalizeResponseStatus(snapshotMock.status),
@@ -644,6 +796,7 @@
       if (mock && !shouldLetServiceWorkerMock()) {
         try {
           await wait(mock.delay);
+          if (!isCurrentLifecycle(lifecycle)) return originalFetch(input, fetchInit);
           const response = createMockResponse(mock);
           finishRequest(request.id, {
             status: normalizeResponseStatus(mock.status),
@@ -665,7 +818,7 @@
       }
 
       try {
-        const response = await state.originalFetch(input, fetchInit);
+        const response = await originalFetch(input, fetchInit);
         const mocked = response.headers.get("x-mocktools-mocked") === "1";
         const snapshotted = response.headers.get("x-mocktools-snapshotted") === "1";
         const responsePatch = {
@@ -698,6 +851,7 @@
         throw error;
       }
     };
+    window.fetch = state.interceptedFetch;
   }
 
   function createFetchRecord(input, initOptions) {
@@ -723,7 +877,7 @@
   function installXhrInterceptor() {
     if (!state.OriginalXHR) return;
     const OriginalXHR = state.OriginalXHR;
-    window.XMLHttpRequest = function InterceptedXMLHttpRequest() {
+    state.InterceptedXHR = function InterceptedXMLHttpRequest() {
       const xhr = new OriginalXHR();
       const meta = {
         id: createId(),
@@ -813,6 +967,7 @@
 
       return xhr;
     };
+    window.XMLHttpRequest = state.InterceptedXHR;
   }
 
   function respondWithMockXhr(xhr, requestId, mock, startTime) {
@@ -1270,6 +1425,7 @@
   function mountPanel() {
     const host = document.createElement("div");
     host.id = "embedded-devtools-host";
+    state.panelHost = host;
     const shadow = host.attachShadow({ mode: "open" });
     document.documentElement.appendChild(host);
 
@@ -1486,6 +1642,7 @@
       notify();
     };
     window.addEventListener("pointerdown", handleOutsidePointer);
+    state.panelOutsidePointerHandler = handleOutsidePointer;
 
     state.subscribers.add(render);
     render();
@@ -7315,6 +7472,7 @@
 
   const api = {
     init,
+    unregister,
     addMock(mock) {
       const nextMock = normalizeMock(mock, state.mocks.length);
       state.mocks = [nextMock, ...state.mocks];

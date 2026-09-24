@@ -75,6 +75,12 @@ window.MockTools.init({
 
 Existing persisted configuration takes precedence over `seedMocks`. To use the seed configuration again, click Reset in Settings or clear the site's stored data.
 
+Call `unregister()` to remove the panel, restore the page's original `fetch` and `XMLHttpRequest`, stop Mock/Snapshot interception, and unregister the MockTools Service Worker. Saved Mock and Snapshot configuration is kept for the next `init()`:
+
+```js
+await window.MockTools.unregister();
+```
+
 ## Mock Matching and Responses
 
 ```js
