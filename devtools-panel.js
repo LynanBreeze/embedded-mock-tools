@@ -4886,7 +4886,7 @@
         right: 0;
         bottom: 0;
         z-index: 2147483645;
-        background: rgba(0, 0, 0, 0.2);
+        background: rgba(0, 0, 0, 0.3);
         opacity: 0;
         visibility: hidden;
         transition: opacity 0.3s ease, visibility 0.3s ease;
@@ -6242,7 +6242,7 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.4);
+        background: rgba(0, 0, 0, 0.3);
         z-index: 10000;
         display: flex;
         align-items: center;
@@ -6504,7 +6504,7 @@
         .request-list, .detail { border-bottom: 1px solid #d9e1ee; border-right: 0; }
       }
       /* Extracted from former inline template styles. */
-      .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 11000; display: flex; align-items: center; justify-content: center; }
+      .inline-style-52ecd228 { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 11000; display: flex; align-items: center; justify-content: center; }
       .inline-style-57e41c3b { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 440px; max-width: 90%; overflow: hidden; }
       .inline-style-7ebc7e67 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; }
       .inline-style-a57ba1a3 { margin: 0; font-size: 14px; color: #1e293b; font-weight: 700; }
@@ -6543,7 +6543,7 @@
       .inline-style-5f6b5dd6 { margin-top: 16px; border-top: 1px solid #edf2f7; padding-top: 16px; }
       .inline-style-4de12c33 { padding: 10px 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; }
       .inline-style-1c132269 { margin-right: auto; }
-      .inline-style-19113f9d { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 10500; display: flex; align-items: center; justify-content: center; }
+      .modal-overlay.inline-style-19113f9d { z-index: 10500; }
       .inline-style-d7a3860a { background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: flex; flex-direction: column; width: 680px; max-width: 90vw; max-height: 85vh; overflow: hidden; }
       .inline-style-801856b0 { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
       .inline-style-e191b109 { padding: 16px; overflow-y: auto; flex-grow: 1; min-height: 0; }
