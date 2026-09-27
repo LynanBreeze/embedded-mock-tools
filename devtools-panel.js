@@ -39,7 +39,6 @@
     requestSort: "newest",
     requestSearch: "",
     collapsedSections: new Set(["Request headers", "Request body", "Response headers", "Mock Headers", "Mock Rule Request Body", "Mock Rule Metadata"]),
-    floatButtonTucked: false,
     requestSearchStatus: "",
     mockEnabled: safeLocalStorageGet("embedded-devtools-mock-enabled") !== "false",
     exportGeneratedTypeScript: safeLocalStorageGet(TYPESCRIPT_EXPORT_STORAGE_KEY) === "true",
@@ -1420,40 +1419,6 @@
     return { top: topVal, bottom: bottomVal };
   }
 
-  function applyUntuckedPosition(floatBtn) {
-    const pos = state.buttonPosition;
-    if (!pos) return;
-
-    if (typeof pos === "string") {
-      if (pos === "bottom-left") {
-        floatBtn.style.left = "12px";
-        floatBtn.style.right = "auto";
-        floatBtn.style.bottom = "150px";
-        floatBtn.style.top = "auto";
-      } else if (pos === "bottom-right") {
-        floatBtn.style.left = "auto";
-        floatBtn.style.right = "12px";
-        floatBtn.style.bottom = "150px";
-        floatBtn.style.top = "auto";
-      } else if (pos === "top-left") {
-        floatBtn.style.left = "12px";
-        floatBtn.style.right = "auto";
-        floatBtn.style.bottom = "auto";
-        floatBtn.style.top = "24px";
-      } else if (pos === "top-right") {
-        floatBtn.style.left = "auto";
-        floatBtn.style.right = "12px";
-        floatBtn.style.bottom = "auto";
-        floatBtn.style.top = "24px";
-      }
-    } else if (typeof pos === "object") {
-      floatBtn.style.left = pos.left !== undefined ? pos.left : "auto";
-      floatBtn.style.right = pos.right !== undefined ? pos.right : "auto";
-      floatBtn.style.top = pos.top !== undefined ? pos.top : "auto";
-      floatBtn.style.bottom = pos.bottom !== undefined ? pos.bottom : "auto";
-    }
-  }
-
   function mountPanel() {
     const host = document.createElement("div");
     host.id = "embedded-devtools-host";
@@ -1566,48 +1531,47 @@
 
       // Update Float Button
       const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
-      if (state.floatButtonTucked) {
-        const viewWidth = document.documentElement.clientWidth;
-        const vPos = getVerticalPosition(floatBtn);
+      const snapshotEnabled = Boolean(state.activeSnapshotId);
+      const statusCount = Number(state.mockEnabled) + Number(snapshotEnabled);
+      const tuckedWidth = [36, 36, 52][statusCount];
+      floatBtn.classList.remove("status-count-0", "status-count-1", "status-count-2");
+      floatBtn.classList.add(`status-count-${statusCount}`);
+      const viewWidth = document.documentElement.clientWidth;
+      const vPos = getVerticalPosition(floatBtn);
 
-        floatBtn.style.top = vPos.top;
-        floatBtn.style.bottom = vPos.bottom;
+      floatBtn.style.top = vPos.top;
+      floatBtn.style.bottom = vPos.bottom;
 
-        if (isLeftAligned(floatBtn)) {
-          floatBtn.style.left = "-2px";
-          floatBtn.style.right = "auto";
-          floatBtn.classList.add("tucked-left");
-          floatBtn.classList.remove("tucked");
-        } else {
-          floatBtn.style.left = `${viewWidth - 40}px`;
-          floatBtn.style.right = "auto";
-          floatBtn.classList.add("tucked");
-          floatBtn.classList.remove("tucked-left");
-        }
-        floatBtn.style.position = "fixed";
-        floatBtn.style.opacity = "0.9";
-      } else {
-        if (state.buttonPosition) {
-          applyUntuckedPosition(floatBtn);
-        } else {
-          floatBtn.style.left = "";
-          floatBtn.style.top = "";
-          floatBtn.style.bottom = "";
-          floatBtn.style.right = "";
-        }
-        floatBtn.style.position = "";
-        floatBtn.style.opacity = "";
+      if (isLeftAligned(floatBtn)) {
+        floatBtn.style.left = "0px";
+        floatBtn.style.right = "auto";
+        floatBtn.classList.add("tucked-left");
         floatBtn.classList.remove("tucked");
+      } else {
+        floatBtn.style.left = `${viewWidth - tuckedWidth}px`;
+        floatBtn.style.right = "auto";
+        floatBtn.classList.add("tucked");
         floatBtn.classList.remove("tucked-left");
       }
+      floatBtn.style.position = "fixed";
+      floatBtn.style.opacity = "0.9";
 
-      const snapshotEnabled = Boolean(state.activeSnapshotId);
       const statusTitle = state.mockEnabled ? "Mock intercepting is active" : "Mock intercepting is paused";
       const snapshotStatusTitle = snapshotEnabled ? "Snapshot intercepting is active" : "Snapshot intercepting is paused";
+      const statusIndicators = [
+        state.mockEnabled
+          ? `<span class="status-chip mock-indicator active" title="${statusTitle}" aria-label="${statusTitle}">M</span>`
+          : "",
+        snapshotEnabled
+          ? `<span class="status-chip snapshot-indicator active" title="${snapshotStatusTitle}" aria-label="${snapshotStatusTitle}">S</span>`
+          : "",
+        statusCount === 0
+          ? `<span class="status-dot" title="Mock and Snapshot are off" aria-label="Mock and Snapshot are off"></span>`
+          : ""
+      ].join("");
       floatBtn.innerHTML = `
         <span class="status-indicators" aria-label="Mock and Snapshot status">
-          <i class="indicator-dot mock-indicator ${state.mockEnabled ? "active" : ""}" title="${statusTitle}" aria-label="${statusTitle}"></i>
-          <i class="indicator-dot snapshot-indicator ${snapshotEnabled ? "active" : ""}" title="${snapshotStatusTitle}" aria-label="${snapshotStatusTitle}"></i>
+          ${statusIndicators}
         </span>
         <span>Net</span>
         <b>${state.requests.length}</b>
@@ -1742,107 +1706,6 @@
 
     if (floatBtn && !floatBtn._eventsBound) {
       floatBtn._eventsBound = true;
-      let idleTimer = null;
-
-      const startIdleTimer = () => {
-        stopIdleTimer();
-        idleTimer = setTimeout(() => {
-          tuckButtonIntoEdge();
-        }, 3000);
-      };
-
-      const stopIdleTimer = () => {
-        if (idleTimer) {
-          clearTimeout(idleTimer);
-          idleTimer = null;
-        }
-      };
-
-      const tuckButtonIntoEdge = () => {
-        const rect = floatBtn.getBoundingClientRect();
-
-        floatBtn.style.transition = "none";
-        floatBtn.style.left = `${rect.left}px`;
-        floatBtn.style.top = `${rect.top}px`;
-        floatBtn.style.bottom = "auto";
-        floatBtn.style.right = "auto";
-
-        floatBtn.offsetHeight;
-
-        state.floatButtonTucked = true;
-        const vPos = getVerticalPosition(floatBtn);
-        const viewWidth = document.documentElement.clientWidth;
-
-        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
-        
-        floatBtn.style.top = vPos.top;
-        floatBtn.style.bottom = vPos.bottom;
-
-        if (isLeftAligned(floatBtn)) {
-          floatBtn.classList.add("tucked-left");
-          floatBtn.classList.remove("tucked");
-          floatBtn.style.left = "-2px";
-        } else {
-          floatBtn.classList.add("tucked");
-          floatBtn.classList.remove("tucked-left");
-          floatBtn.style.left = `${viewWidth - 40}px`;
-        }
-        floatBtn.style.right = "auto";
-        floatBtn.style.opacity = "0.9";
-      };
-
-      const untuckButton = () => {
-        state.floatButtonTucked = false;
-        floatBtn.classList.remove("tucked");
-        floatBtn.classList.remove("tucked-left");
-        const rect = floatBtn.getBoundingClientRect();
-        const btnWidth = rect.width || 88;
-        const viewWidth = document.documentElement.clientWidth;
-        const vPos = getVerticalPosition(floatBtn);
-
-        floatBtn.style.transition = "left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s ease";
-        
-        floatBtn.style.top = vPos.top;
-        floatBtn.style.bottom = vPos.bottom;
-
-        if (isLeftAligned(floatBtn)) {
-          let leftDest = "12px";
-          if (state.buttonPosition) {
-            if (typeof state.buttonPosition === "string") {
-              leftDest = "12px";
-            } else if (typeof state.buttonPosition === "object" && state.buttonPosition.left !== undefined) {
-              leftDest = state.buttonPosition.left;
-            }
-          }
-          floatBtn.style.left = leftDest;
-        } else {
-          let rightDest = "12px";
-          if (state.buttonPosition) {
-            if (typeof state.buttonPosition === "string") {
-              rightDest = "12px";
-            } else if (typeof state.buttonPosition === "object" && state.buttonPosition.right !== undefined) {
-              rightDest = state.buttonPosition.right;
-            }
-          }
-          let rightPx = 12;
-          if (typeof rightDest === "string" && rightDest.endsWith("px")) {
-            rightPx = parseFloat(rightDest);
-          }
-          floatBtn.style.left = `${viewWidth - rightPx - btnWidth}px`;
-        }
-        floatBtn.style.right = "auto";
-        floatBtn.style.opacity = "1";
-      };
-
-      floatBtn.onmouseenter = () => {
-        stopIdleTimer();
-        untuckButton();
-      };
-
-      floatBtn.onmouseleave = () => {
-        startIdleTimer();
-      };
-
       floatBtn.onclick = () => {
         state.expanded = true;
         if (state.activeSnapshotId) {
@@ -1853,8 +1716,6 @@
         }
         notify();
       };
-
-      startIdleTimer();
     }
     root.querySelectorAll("[data-close]").forEach((el) => {
       el.addEventListener("click", () => {
@@ -4895,7 +4756,7 @@
         z-index: 2147483647;
         backdrop-filter: blur(8px);
         white-space: nowrap;
-        transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1), top 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease, visibility 0.4s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: left 0.28s ease, width 0.28s ease, opacity 0.2s ease, visibility 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         opacity: 1;
         visibility: visible;
       }
@@ -4907,20 +4768,31 @@
       }
       .status-indicators {
         align-items: center;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 9999px;
         display: inline-flex;
-        gap: 6px;
-        padding: 4px 5px;
+        flex: 0 0 auto;
+        gap: 4px;
+        padding: 0;
       }
-      .float-button .indicator-dot {
+      .float-button .status-dot {
+        background: #d4dbe7;
         border-radius: 50%;
-        display: block;
-        flex-shrink: 0;
         height: 10px;
-        opacity: 1;
-        transition: background 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
         width: 10px;
+      }
+      .float-button .status-chip {
+        align-items: center;
+        display: inline-flex;
+        border-radius: 50%;
+        color: #475569;
+        font-size: 10px;
+        font-style: normal;
+        font-weight: 800;
+        justify-content: center;
+        line-height: 1;
+        height: 22px;
+        padding: 0;
+        width: 22px;
+        transition: background 0.3s ease, color 0.3s ease;
       }
       .float-button .mock-indicator {
         background: #d4dbe7;
@@ -4928,36 +4800,53 @@
       .float-button .snapshot-indicator {
         background: #d4dbe7;
       }
-      .float-button .indicator-dot.active {
-        opacity: 1;
+      .float-button .status-chip.active {
+        color: #fff;
       }
       .float-button .mock-indicator.active {
         background: #18a67d;
-        box-shadow: 0 0 0 2px rgba(24, 166, 125, 0.28), 0 0 11px rgba(24, 166, 125, 1);
       }
       .float-button .snapshot-indicator.active {
-        box-shadow: 0 0 8px rgba(139, 92, 246, 0.95);
+        background: #8b5cf6;
       }
-      .float-button.tucked {
-        width: 42px !important;
-        min-width: 42px !important;
-        overflow: hidden !important;
-        padding-left: 2px !important;
-        padding-right: 0 !important;
+      .float-button.tucked.status-count-2,
+      .float-button.tucked-left.status-count-2 {
+        width: 52px;
+        min-width: 52px;
       }
+      .float-button.tucked.status-count-1,
+      .float-button.tucked-left.status-count-1 {
+        width: 36px;
+        min-width: 36px;
+      }
+      .float-button.tucked.status-count-0,
+      .float-button.tucked-left.status-count-0 {
+        width: 36px;
+        min-width: 36px;
+      }
+      .float-button.tucked,
       .float-button.tucked-left {
-        width: 42px !important;
-        min-width: 42px !important;
         overflow: hidden !important;
-        flex-direction: row-reverse;
-        padding-right: 2px !important;
-        padding-left: 0 !important;
+        height: 36px;
+        padding: 0 !important;
+        justify-content: center;
+        border-radius: 9999px;
+      }
+      .float-button.tucked > :not(.status-indicators),
+      .float-button.tucked-left > :not(.status-indicators) {
+        opacity: 0;
+        pointer-events: none;
+        position: absolute;
+        transform: translateX(8px);
+        visibility: hidden;
+      }
+      .float-button > :not(.status-indicators) {
+        transition: opacity 0.18s ease, transform 0.2s ease, visibility 0s linear 0.18s;
       }
       .float-button:hover {
-        transform: translateY(-2px);
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2);
         border-color: rgba(255, 255, 255, 0.15);
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, #243449 0%, #14243b 100%);
       }
       .float-button:active {
         transform: translateY(0);
