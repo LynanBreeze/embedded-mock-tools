@@ -1533,7 +1533,7 @@
       const activeMocks = state.mocks.filter((mock) => mock.enabled).length;
       const snapshotEnabled = Boolean(state.activeSnapshotId);
       const statusCount = Number(state.mockEnabled) + Number(snapshotEnabled);
-      const tuckedWidth = [36, 36, 52][statusCount];
+      const tuckedWidth = [36, 36, 60][statusCount];
       floatBtn.classList.remove("status-count-0", "status-count-1", "status-count-2");
       floatBtn.classList.add(`status-count-${statusCount}`);
       const viewWidth = document.documentElement.clientWidth;
@@ -4791,9 +4791,11 @@
         font-weight: 800;
         justify-content: center;
         line-height: 1;
-        height: 22px;
+        height: 24px;
         padding: 0;
-        width: 22px;
+        width: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
         transition: background 0.3s ease, color 0.3s ease;
       }
       .float-button .mock-indicator {
@@ -4813,8 +4815,13 @@
       }
       .float-button.tucked.status-count-2,
       .float-button.tucked-left.status-count-2 {
-        width: 52px;
-        min-width: 52px;
+        width: 60px;
+        min-width: 60px;
+        height: 40px;
+      }
+      .float-button.tucked.status-count-2 .status-indicators,
+      .float-button.tucked-left.status-count-2 .status-indicators {
+        gap: 6px;
       }
       .float-button.tucked.status-count-1,
       .float-button.tucked-left.status-count-1 {
