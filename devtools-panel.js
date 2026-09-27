@@ -6841,7 +6841,10 @@
         border-radius: 8px 8px 0 0;
         box-shadow: 0 -24px 70px rgba(15,23,42,.22);
         height: 94vh;
+        height: 94dvh;
         left: 24px;
+        min-height: min(520px, 94vh);
+        min-height: min(520px, 94dvh);
         right: 24px;
       }
       .topbar {
