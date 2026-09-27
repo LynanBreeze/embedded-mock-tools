@@ -1426,23 +1426,23 @@
 
     if (typeof pos === "string") {
       if (pos === "bottom-left") {
-        floatBtn.style.left = "24px";
+        floatBtn.style.left = "12px";
         floatBtn.style.right = "auto";
         floatBtn.style.bottom = "150px";
         floatBtn.style.top = "auto";
       } else if (pos === "bottom-right") {
         floatBtn.style.left = "auto";
-        floatBtn.style.right = "24px";
+        floatBtn.style.right = "12px";
         floatBtn.style.bottom = "150px";
         floatBtn.style.top = "auto";
       } else if (pos === "top-left") {
-        floatBtn.style.left = "24px";
+        floatBtn.style.left = "12px";
         floatBtn.style.right = "auto";
         floatBtn.style.bottom = "auto";
         floatBtn.style.top = "24px";
       } else if (pos === "top-right") {
         floatBtn.style.left = "auto";
-        floatBtn.style.right = "24px";
+        floatBtn.style.right = "12px";
         floatBtn.style.bottom = "auto";
         floatBtn.style.top = "24px";
       }
@@ -1574,18 +1574,18 @@
         floatBtn.style.bottom = vPos.bottom;
 
         if (isLeftAligned(floatBtn)) {
-          floatBtn.style.left = "-30px";
+          floatBtn.style.left = "-2px";
           floatBtn.style.right = "auto";
           floatBtn.classList.add("tucked-left");
           floatBtn.classList.remove("tucked");
         } else {
-          floatBtn.style.left = `${viewWidth - 12}px`;
+          floatBtn.style.left = `${viewWidth - 40}px`;
           floatBtn.style.right = "auto";
           floatBtn.classList.add("tucked");
           floatBtn.classList.remove("tucked-left");
         }
         floatBtn.style.position = "fixed";
-        floatBtn.style.opacity = "0.62";
+        floatBtn.style.opacity = "0.9";
       } else {
         if (state.buttonPosition) {
           applyUntuckedPosition(floatBtn);
@@ -1781,14 +1781,14 @@
         if (isLeftAligned(floatBtn)) {
           floatBtn.classList.add("tucked-left");
           floatBtn.classList.remove("tucked");
-          floatBtn.style.left = "-30px";
+          floatBtn.style.left = "-2px";
         } else {
           floatBtn.classList.add("tucked");
           floatBtn.classList.remove("tucked-left");
-          floatBtn.style.left = `${viewWidth - 12}px`;
+          floatBtn.style.left = `${viewWidth - 40}px`;
         }
         floatBtn.style.right = "auto";
-        floatBtn.style.opacity = "0.62";
+        floatBtn.style.opacity = "0.9";
       };
 
       const untuckButton = () => {
@@ -1806,25 +1806,25 @@
         floatBtn.style.bottom = vPos.bottom;
 
         if (isLeftAligned(floatBtn)) {
-          let leftDest = "24px";
+          let leftDest = "12px";
           if (state.buttonPosition) {
             if (typeof state.buttonPosition === "string") {
-              leftDest = "24px";
+              leftDest = "12px";
             } else if (typeof state.buttonPosition === "object" && state.buttonPosition.left !== undefined) {
               leftDest = state.buttonPosition.left;
             }
           }
           floatBtn.style.left = leftDest;
         } else {
-          let rightDest = "24px";
+          let rightDest = "12px";
           if (state.buttonPosition) {
             if (typeof state.buttonPosition === "string") {
-              rightDest = "24px";
+              rightDest = "12px";
             } else if (typeof state.buttonPosition === "object" && state.buttonPosition.right !== undefined) {
               rightDest = state.buttonPosition.right;
             }
           }
-          let rightPx = 24;
+          let rightPx = 12;
           if (typeof rightDest === "string" && rightDest.endsWith("px")) {
             rightPx = parseFloat(rightDest);
           }
@@ -4891,7 +4891,7 @@
         height: 42px;
         padding: 0 16px;
         position: fixed;
-        right: 24px;
+        right: 12px;
         z-index: 2147483647;
         backdrop-filter: blur(8px);
         white-space: nowrap;
@@ -4910,33 +4910,33 @@
         background: rgba(255, 255, 255, 0.1);
         border-radius: 9999px;
         display: inline-flex;
-        gap: 5px;
-        padding: 4px 6px;
+        gap: 6px;
+        padding: 4px 5px;
       }
       .float-button .indicator-dot {
         border-radius: 50%;
         display: block;
         flex-shrink: 0;
-        height: 9px;
-        opacity: .42;
+        height: 10px;
+        opacity: 1;
         transition: background 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
-        width: 9px;
+        width: 10px;
       }
       .float-button .mock-indicator {
-        background: #18a67d;
+        background: #d4dbe7;
       }
       .float-button .snapshot-indicator {
-        background: #a78bfa;
+        background: #d4dbe7;
       }
       .float-button .indicator-dot.active {
         opacity: 1;
       }
       .float-button .mock-indicator.active {
-        background: #34d399;
-        box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.28), 0 0 11px rgba(52, 211, 153, 1);
+        background: #18a67d;
+        box-shadow: 0 0 0 2px rgba(24, 166, 125, 0.28), 0 0 11px rgba(24, 166, 125, 1);
       }
       .float-button .snapshot-indicator.active {
-        box-shadow: 0 0 8px rgba(167, 139, 250, 0.95);
+        box-shadow: 0 0 8px rgba(139, 92, 246, 0.95);
       }
       .float-button.tucked {
         width: 42px !important;
@@ -5371,7 +5371,7 @@
         border-radius: 4px;
         color: #dbeafe;
         top: 36px;
-        right: 12px;
+        right: 24px;
         z-index: 1;
       }
       .detail > [data-section-title="Request headers"] > .view-mode-btn:hover:not(.copied),
