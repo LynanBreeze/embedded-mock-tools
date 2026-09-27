@@ -6846,14 +6846,14 @@
       }
       .topbar {
         background: linear-gradient(105deg, #111a2d 0%, #1c2b49 100%);
-        height: 58px;
-        padding: 0 18px;
+        height: 48px;
+        padding: 10px;
       }
       .topbar div { gap: 12px; }
       .topbar span { color: #aebbd0; font-size: 12px; }
       .sw-status-badge {
         align-items: center;
-        height: 32px;
+        height: 28px;
         line-height: 1;
         padding: 0 10px;
         vertical-align: middle;
@@ -6867,10 +6867,10 @@
         line-height: 1;
       }
       .topbar nav { gap: 6px; }
-      .topbar nav .icon-btn { border-radius: 6px; height: 32px; width: 32px; }
+      .topbar nav .icon-btn { border-radius: 6px; height: 28px; width: 28px; }
       .grid {
         grid-template-columns: minmax(250px, .78fr) minmax(420px, 1.55fr) minmax(360px, 1fr);
-        height: calc(100% - 58px);
+        height: calc(100% - 48px);
       }
       .request-list { border-right-color: var(--panel-line); }
       .request-filter, .mock-group-tabs {
